@@ -5,7 +5,7 @@ ARG TARGETARCH
 ENV DEBIAN_FRONTEND=noninteractive
 ENV VCPKG_ROOT=/opt/vcpkg
 ENV CMAKE_TOOLCHAIN_FILE=/opt/vcpkg/scripts/buildsystems/vcpkg.cmake
-ENV VCPKG_OVERLAY_TRIPLETS=/opt/vcpkg/custom-triplets
+ENV VCPKG_OVERLAY_TRIPLETS=/opt/vcpkg-triplets
 
 # Base image for building and running the CMake-based C++ server in Docker.
 RUN apt-get update -o Acquire::Retries=5 && \
