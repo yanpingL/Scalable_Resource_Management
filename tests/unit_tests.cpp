@@ -160,7 +160,12 @@ TEST_F(JwtUtilsTest, VerifyJwtRejectsTamperedToken) {
     std::string token = JwtUtils::create_jwt(7);
     ASSERT_FALSE(token.empty());
 
-    token.back() = token.back() == 'a' ? 'b' : 'a';
+    const std::size_t signature_start = token.rfind('.');
+    ASSERT_NE(std::string::npos, signature_start);
+    ASSERT_LT(signature_start + 1, token.size());
+
+    char& signature_ch = token[signature_start + 1];
+    signature_ch = signature_ch == 'a' ? 'b' : 'a';
 
     EXPECT_FALSE(JwtUtils::verify_jwt_and_get_user_id(token).has_value());
 }

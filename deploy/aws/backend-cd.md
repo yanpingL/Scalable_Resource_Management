@@ -46,7 +46,11 @@ AWS_REGION=ap-southeast-2
 ECR_REPOSITORY=webserver-backend
 ECS_TASK_DEFINITION=ecs-task-definition.json
 ECS_CONTAINER_NAME=webserver-backend
+ECS_DESIRED_COUNT=2
 ```
+
+`ECS_DESIRED_COUNT=2` tells the ECS service to keep two backend tasks
+running after each deployment.
 
 ## AWS IAM Role
 

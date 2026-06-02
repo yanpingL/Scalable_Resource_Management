@@ -20,15 +20,14 @@ jobs:
         with:
           context: .
           file: ./Dockerfile
+          platforms: linux/amd64
           load: true
           tags: webserver-web-dev:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=backend-amd64
+          cache-to: type=gha,scope=backend-amd64,mode=max
 
       - name: Run C++ unit tests
-        run: |
-          docker run --rm webserver-web-dev:latest \
-            bash -lc "cd /workspace && cmake --build build --target unit_tests --parallel 1 && ctest --test-dir build --output-on-failure"
+        run: docker run --rm webserver-web-dev:latest ./build/bin/unit_tests
 
       - name: Clean up Docker environment
         if: always()
