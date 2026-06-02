@@ -1,6 +1,11 @@
 #include "logger.h"
 #include <iostream>
 #include <ctime>
+#include <utility>
+
+Logger::Logger()
+    : running(true),
+      worker(&Logger::worker_loop, this) {}
 
 // Returns the shared logger instance.
 Logger* Logger::get_instance() {
@@ -10,11 +15,23 @@ Logger* Logger::get_instance() {
 
 // Opens the log file in append mode.
 void Logger::init(const std::string& filename) {
+    std::lock_guard<std::mutex> lock(mtx);
+
     log_file.open(filename, std::ios::app);
 }
 
-// Closes the log file if it is open.
+// Flushes queued log entries and closes the log file if it is open.
 Logger::~Logger() {
+    {
+        std::lock_guard<std::mutex> lock(mtx);
+        running = false;
+    }
+    cv.notify_all();
+
+    if (worker.joinable()) {
+        worker.join();
+    }
+
     if (log_file.is_open()) {
         log_file.close();
     }
@@ -23,8 +40,10 @@ Logger::~Logger() {
 // Formats the current local time for log entries.
 std::string get_time() {
     time_t now = time(nullptr);
+    tm local_tm{};
     char buf[64];
-    strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", localtime(&now));
+    localtime_r(&now, &local_tm);
+    strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", &local_tm);
     return std::string(buf);
 }
 
@@ -38,18 +57,44 @@ std::string level_to_string(LogLevel level) {
     }
 }
 
-// Writes one log line to the file and console.
-void Logger::log(LogLevel level, const std::string& message) {
-    std::lock_guard<std::mutex> lock(mtx);
+void Logger::worker_loop() {
+    while (true) {
+        std::list<std::string> pending;
 
+        {
+            std::unique_lock<std::mutex> lock(mtx);
+            cv.wait(lock, [this] {
+                return !running || !log_queue.empty();
+            });
+
+            if (!running && log_queue.empty()) {
+                break;
+            }
+
+            pending.splice(pending.end(), log_queue);
+        }
+
+        for (const std::string& log_msg : pending) {
+            if (log_file.is_open()) {
+                log_file << log_msg << std::endl;
+            }
+
+            std::cerr << log_msg << std::endl;
+        }
+    }
+}
+
+// Queues one log line for the async logger thread.
+void Logger::log(LogLevel level, const std::string& message) {
     std::string log_msg =
         "[" + get_time() + "] [" +
         level_to_string(level) + "] " +
         message;
 
-    if (log_file.is_open()) {
-        log_file << log_msg << std::endl;
+    {
+        std::lock_guard<std::mutex> lock(mtx);
+        log_queue.push_back(std::move(log_msg));
     }
 
-    std::cout << log_msg << std::endl;
+    cv.notify_one();
 }

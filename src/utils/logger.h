@@ -3,7 +3,10 @@
 
 #include <string>
 #include <fstream>
+#include <condition_variable>
+#include <list>
 #include <mutex>
+#include <thread>
 
 enum LogLevel {
     INFO,
@@ -20,11 +23,20 @@ public:
     void log(LogLevel level, const std::string& message);
 
 private:
-    Logger() {}
+    Logger();
     ~Logger();
+
+    Logger(const Logger&) = delete;
+    Logger& operator=(const Logger&) = delete;
+
+    void worker_loop();
 
     std::ofstream log_file;
     std::mutex mtx;
+    std::condition_variable cv;
+    std::list<std::string> log_queue;
+    bool running;
+    std::thread worker;
 };
 
 #endif
