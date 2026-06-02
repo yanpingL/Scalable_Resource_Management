@@ -15,8 +15,9 @@ It does the following:
 1. Assumes an AWS IAM role through GitHub OIDC.
 2. Builds the backend Docker image for `linux/arm64`.
 3. Pushes the image to ECR.
-4. Renders a new ECS task definition using the new image tag.
-5. Updates the ECS service and waits for service stability.
+4. Renders and registers a new ECS task definition using the new image tag.
+5. Runs a one-off ECS task to apply database migrations.
+6. Updates the ECS service and waits for service stability.
 
 The deploy job runs on GitHub's native `ubuntu-24.04-arm` runner so the
 ARM64 image is built without QEMU emulation.
@@ -69,8 +70,10 @@ ecr:UploadLayerPart
 ecr:CompleteLayerUpload
 ecr:PutImage
 ecs:DescribeServices
+ecs:DescribeTasks
 ecs:DescribeTaskDefinition
 ecs:RegisterTaskDefinition
+ecs:RunTask
 ecs:UpdateService
 iam:PassRole
 ```
