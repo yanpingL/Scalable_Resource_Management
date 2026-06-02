@@ -1,7 +1,24 @@
 #include "resource_service.h"
 #include "dao/resource_dao.h"
 #include "dao/user_dao.h"
+#include "cache/resource_cache.h"
 #include "service/storage_service.h"
+#include "utils/logger.h"
+
+namespace {
+std::optional<res_json> parse_cached_json(const std::optional<std::string>& cached) {
+     if (!cached.has_value()) {
+          return std::nullopt;
+     }
+
+     try {
+          return res_json::parse(cached.value());
+     } catch (...) {
+          Logger::get_instance()->log(ERROR, "failed to parse cached resource JSON");
+          return std::nullopt;
+     }
+}
+}
 
 // Creates a resource and returns a JSON status object.
 res_json ResourceService::create_resource(const ResourceInfo& Info){
@@ -17,6 +34,7 @@ res_json ResourceService::create_resource(const ResourceInfo& Info){
      if (!ok){
           res["error"] = ResourceDAO::msg;
      } else {
+          ResourceCache::invalidate_resources(Info.user_id);
           res["status"] = "created";
      }
      return res;
@@ -24,6 +42,11 @@ res_json ResourceService::create_resource(const ResourceInfo& Info){
 
 // Returns all resources for a user as a JSON array.
 res_json ResourceService::get_resources(int user_id){
+     if (auto cached = parse_cached_json(ResourceCache::get_resources(user_id))) {
+          Logger::get_instance()->log(DEBUG, "resource list cache hit user_id=" + std::to_string(user_id));
+          return cached.value();
+     }
+
      auto vec = ResourceDAO::get_resources(user_id);
      
      res_json res;
@@ -43,11 +66,19 @@ res_json ResourceService::get_resources(int user_id){
 
           res["data"].push_back(item);
      }
+
+     ResourceCache::set_resources(user_id, res.dump());
      return res;
 }
 
 // Returns one resource as a JSON object.
 res_json ResourceService::get_resource(int user_id, int id){
+     if (auto cached = parse_cached_json(ResourceCache::get_resource(user_id, id))) {
+          Logger::get_instance()->log(DEBUG, "resource cache hit user_id=" +
+               std::to_string(user_id) + " id=" + std::to_string(id));
+          return cached.value();
+     }
+
      auto resource = ResourceDAO::get_resource(user_id, id);
 
      res_json res;
@@ -62,6 +93,7 @@ res_json ResourceService::get_resource(int user_id, int id){
      res["content"] = r.content;
      res["is_file"] = r.is_file;
 
+     ResourceCache::set_resource(user_id, id, res.dump());
      return res;
 }
 
@@ -97,6 +129,8 @@ res_json ResourceService::update_resource(const ResourceInfo& Info){
      if (!ok){
           res["error"] = ResourceDAO::msg;
      } else {
+          ResourceCache::invalidate_resource(Info.user_id, Info.id);
+          ResourceCache::invalidate_resources(Info.user_id);
           res["status"] = "updated";
      }
      return res;
@@ -128,6 +162,8 @@ res_json ResourceService::delete_resource(int user_id, int id){
      if (!ok) {
          res["error"] = ResourceDAO::msg;
      } else {
+         ResourceCache::invalidate_resource(user_id, id);
+         ResourceCache::invalidate_resources(user_id);
          res["status"] = "deleted";
      }
      return res;  

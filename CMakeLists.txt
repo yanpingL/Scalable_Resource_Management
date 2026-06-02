@@ -22,6 +22,8 @@ set(WEBSERVER_SOURCES
     src/service/resource_service.cpp
     src/service/storage_service.cpp
     src/service/user_service.cpp
+    src/cache/redis_client.cpp
+    src/cache/resource_cache.cpp
     src/utils/jwt_utils.cpp
     src/utils/logger.cpp
 )
@@ -48,6 +50,8 @@ find_package(nlohmann_json CONFIG REQUIRED)
 find_package(miniocpp CONFIG REQUIRED)
 find_package(jwt-cpp CONFIG REQUIRED)
 find_package(PostgreSQL REQUIRED)
+find_package(hiredis CONFIG REQUIRED)
+find_package(hiredis_ssl CONFIG REQUIRED)
 
 # Link the executable against all external libraries required by the current code.
 target_link_libraries(${PROJECT_NAME}
@@ -55,6 +59,8 @@ target_link_libraries(${PROJECT_NAME}
         Threads::Threads
         OpenSSL::Crypto
         CURL::libcurl
+        hiredis::hiredis
+        hiredis::hiredis_ssl
         nlohmann_json::nlohmann_json
         miniocpp::miniocpp
         jwt-cpp::jwt-cpp
