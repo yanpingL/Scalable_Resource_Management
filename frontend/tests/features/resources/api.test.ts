@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import axios from "axios";
 import {
   createFileResource,
   createTextResource,
@@ -8,6 +9,10 @@ import {
   updateTextResource,
 } from "@/features/resources/api";
 
+vi.mock("axios");
+
+const mockedAxios = vi.mocked(axios);
+
 describe("resources api", () => {
   beforeEach(() => {
     window.localStorage.setItem("resource_manager_token", "jwt-token");
@@ -15,21 +20,17 @@ describe("resources api", () => {
 
   afterEach(() => {
     window.localStorage.clear();
-    vi.unstubAllGlobals();
+    vi.clearAllMocks();
   });
 
   it("lists resources with the bearer token", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ data: [] }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }),
-    );
-    vi.stubGlobal("fetch", fetchMock);
+    mockedAxios.request.mockResolvedValue({ data: { data: [] } });
 
     await expect(listResources()).resolves.toEqual([]);
 
-    expect(fetchMock).toHaveBeenCalledWith("/api/resources", {
+    expect(mockedAxios.request).toHaveBeenCalledWith({
+      url: "/api/resources",
+      method: "GET",
       headers: {
         Authorization: "Bearer jwt-token",
         "Content-Type": "application/json",
@@ -38,25 +39,20 @@ describe("resources api", () => {
   });
 
   it("gets a single resource by id", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          id: 7,
-          title: "One",
-          content: "Body",
-          is_file: false,
-        }),
-        {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        },
-      ),
-    );
-    vi.stubGlobal("fetch", fetchMock);
+    mockedAxios.request.mockResolvedValue({
+      data: {
+        id: 7,
+        title: "One",
+        content: "Body",
+        is_file: false,
+      },
+    });
 
     await getResource(7);
 
-    expect(fetchMock).toHaveBeenCalledWith("/api/resources?id=7", {
+    expect(mockedAxios.request).toHaveBeenCalledWith({
+      url: "/api/resources?id=7",
+      method: "GET",
       headers: {
         Authorization: "Bearer jwt-token",
         "Content-Type": "application/json",
@@ -65,59 +61,53 @@ describe("resources api", () => {
   });
 
   it("creates, updates, and deletes resources with expected payloads", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ status: "created" }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }),
-    );
-    vi.stubGlobal("fetch", fetchMock);
+    mockedAxios.request.mockResolvedValue({ data: { status: "created" } });
 
     await createTextResource({ title: "Text", content: "Hello" });
     await createFileResource({ title: "File", content: "http://file" });
     await updateTextResource(3, { title: "Updated", content: "Body" });
     await deleteResource(3);
 
-    expect(fetchMock).toHaveBeenNthCalledWith(
+    expect(mockedAxios.request).toHaveBeenNthCalledWith(
       1,
-      "/api/resources",
       expect.objectContaining({
+        url: "/api/resources",
         method: "POST",
-        body: JSON.stringify({
+        data: JSON.stringify({
           title: "Text",
           content: "Hello",
           is_file: false,
         }),
       }),
     );
-    expect(fetchMock).toHaveBeenNthCalledWith(
+    expect(mockedAxios.request).toHaveBeenNthCalledWith(
       2,
-      "/api/resources",
       expect.objectContaining({
+        url: "/api/resources",
         method: "POST",
-        body: JSON.stringify({
+        data: JSON.stringify({
           title: "File",
           content: "http://file",
           is_file: true,
         }),
       }),
     );
-    expect(fetchMock).toHaveBeenNthCalledWith(
+    expect(mockedAxios.request).toHaveBeenNthCalledWith(
       3,
-      "/api/resources",
       expect.objectContaining({
+        url: "/api/resources",
         method: "PUT",
-        body: JSON.stringify({
+        data: JSON.stringify({
           id: 3,
           title: "Updated",
           content: "Body",
         }),
       }),
     );
-    expect(fetchMock).toHaveBeenNthCalledWith(
+    expect(mockedAxios.request).toHaveBeenNthCalledWith(
       4,
-      "/api/resources?id=3",
       expect.objectContaining({
+        url: "/api/resources?id=3",
         method: "DELETE",
       }),
     );
