@@ -77,12 +77,15 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
       ca-certificates \
       libcurl4 \
       libpq5 \
-      libssl3
+      libssl3 \
+      postgresql-client
 
 WORKDIR /workspace
 
 COPY --from=build /opt/vcpkg-runtime /opt/vcpkg-runtime
 COPY --from=build /workspace/build/bin ./build/bin
+COPY db/migrations ./db/migrations
+COPY scripts ./scripts
 COPY src/resources ./src/resources
 
 CMD ["./build/bin/webserver", "8080"]
