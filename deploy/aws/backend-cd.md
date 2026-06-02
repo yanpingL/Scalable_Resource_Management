@@ -18,6 +18,9 @@ It does the following:
 4. Renders a new ECS task definition using the new image tag.
 5. Updates the ECS service and waits for service stability.
 
+The deploy job runs on GitHub's native `ubuntu-24.04-arm` runner so the
+ARM64 image is built without QEMU emulation.
+
 ## GitHub Configuration
 
 Create a GitHub environment:
