@@ -16,6 +16,7 @@
 #include "thread/threadpool.h"
 #include "network/http_conn.h"
 #include "db/connection_pool.h"
+#include "cache/redis_client.h"
 #include "utils/logger.h"
 #include "utils/env_utils.h"
 
@@ -23,6 +24,11 @@
 
 #define DEFAULT_MAX_FD 4096  // default maximum #file descriptors/connections
 #define MAX_EVENT_NUMBER 10000  // maximum #events to be listned
+
+bool env_enabled(const char* name) {
+    std::string value = EnvUtils::get_env_or_default(name, "false");
+    return value == "1" || value == "true" || value == "TRUE" || value == "yes" || value == "YES";
+}
 
 // Installs a process signal handler.
 void addsig(int sig, void(handler)(int)){
@@ -86,6 +92,21 @@ int main(int argc, char* argv[]){
         EnvUtils::get_env_int_or_default("POSTGRES_PORT", 5432),
         10
     );
+
+    if (env_enabled("REDIS_ENABLED")) {
+        bool redis_ok = RedisClient::get_instance()->init(
+            EnvUtils::get_env_or_default("REDIS_HOST", "localhost"),
+            EnvUtils::get_env_int_or_default("REDIS_PORT", 6379),
+            EnvUtils::get_env_or_default("REDIS_PASSWORD", ""),
+            env_enabled("REDIS_TLS")
+        );
+
+        if (!redis_ok) {
+            Logger::get_instance()->log(ERROR, "Redis cache disabled; continuing without cache");
+        }
+    } else {
+        Logger::get_instance()->log(INFO, "Redis cache disabled by configuration");
+    }
 
     // Connection objects are indexed directly by socket fd.
     http_conn * users = new http_conn[max_fd];

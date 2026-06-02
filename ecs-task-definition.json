@@ -12,7 +12,7 @@
   "containerDefinitions": [
     {
       "name": "webserver-backend",
-      "image": "984053725330.dkr.ecr.ap-southeast-2.amazonaws.com/webserver-backend@sha256:1a7dda17bd5343cc79fea3efc6e08da75078a2afd768a610b73617193396a273",
+      "image": "984053725330.dkr.ecr.ap-southeast-2.amazonaws.com/webserver-backend:valkey-20260602",
       "essential": true,
       "portMappings": [
         {
@@ -25,6 +25,10 @@
         { "name": "POSTGRES_PORT", "value": "5432" },
         { "name": "POSTGRES_DB", "value": "webdb" },
         { "name": "POSTGRES_USER", "value": "webuser" },
+        { "name": "REDIS_ENABLED", "value": "true" },
+        { "name": "REDIS_HOST", "value": "master.webserver-valkey.dhwybr.apse2.cache.amazonaws.com" },
+        { "name": "REDIS_PORT", "value": "6379" },
+        { "name": "REDIS_TLS", "value": "true" },
         { "name": "S3_ENDPOINT", "value": "https://s3.amazonaws.com" },
         { "name": "S3_PUBLIC_ENDPOINT", "value": "https://s3.amazonaws.com" },
         { "name": "S3_BUCKET", "value": "webserver-files-984053725330-ap-southeast-2" },
@@ -40,7 +44,8 @@
         { "name": "POSTGRES_PASSWORD", "valueFrom": "arn:aws:secretsmanager:ap-southeast-2:984053725330:secret:webserver/prod/postgres-password-7rcipj" },
         { "name": "JWT_SECRET", "valueFrom": "arn:aws:secretsmanager:ap-southeast-2:984053725330:secret:webserver/prod/jwt-secret-vcfmTa" },
         { "name": "S3_ACCESS_KEY", "valueFrom": "arn:aws:secretsmanager:ap-southeast-2:984053725330:secret:webserver/prod/s3-access-key-5YQWA6" },
-        { "name": "S3_SECRET_KEY", "valueFrom": "arn:aws:secretsmanager:ap-southeast-2:984053725330:secret:webserver/prod/s3-secret-key-uPOZpD" }
+        { "name": "S3_SECRET_KEY", "valueFrom": "arn:aws:secretsmanager:ap-southeast-2:984053725330:secret:webserver/prod/s3-secret-key-uPOZpD" },
+        { "name": "REDIS_PASSWORD", "valueFrom": "arn:aws:secretsmanager:ap-southeast-2:984053725330:secret:webserver/prod/valkey-auth-token-IO0BuT" }
       ],
       "logConfiguration": {
         "logDriver": "awslogs",
