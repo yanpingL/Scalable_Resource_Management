@@ -1,3 +1,4 @@
+import axios from "axios";
 import { getAuthToken } from "@/features/auth/authStore";
 import { apiFetch } from "@/shared/api/client";
 import type {
@@ -23,16 +24,18 @@ export function requestUploadUrl(payload: UploadUrlRequest) {
 
 export async function uploadFileToStorage(file: File, uploadUrl: string) {
   // This PUT goes directly to MinIO/S3, not to the Next.js or C++ app.
-  const response = await fetch(uploadUrl, {
-    method: "PUT",
-    headers: {
-      "Content-Type": file.type,
-    },
-    body: file,
-  });
+  try {
+    await axios.put(uploadUrl, file, {
+      headers: {
+        "Content-Type": file.type,
+      },
+    });
+  } catch (error) {
+    if (axios.isAxiosError(error) && error.response) {
+      throw new Error(`File upload failed with status ${error.response.status}`);
+    }
 
-  if (!response.ok) {
-    throw new Error(`File upload failed with status ${response.status}`);
+    throw error;
   }
 }
 
