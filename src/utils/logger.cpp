@@ -13,14 +13,7 @@ Logger* Logger::get_instance() {
     return &instance;
 }
 
-// Opens the log file in append mode.
-void Logger::init(const std::string& filename) {
-    std::lock_guard<std::mutex> lock(mtx);
-
-    log_file.open(filename, std::ios::app);
-}
-
-// Flushes queued log entries and closes the log file if it is open.
+// Flushes queued log entries before shutdown.
 Logger::~Logger() {
     {
         std::lock_guard<std::mutex> lock(mtx);
@@ -30,10 +23,6 @@ Logger::~Logger() {
 
     if (worker.joinable()) {
         worker.join();
-    }
-
-    if (log_file.is_open()) {
-        log_file.close();
     }
 }
 
@@ -75,10 +64,6 @@ void Logger::worker_loop() {
         }
 
         for (const std::string& log_msg : pending) {
-            if (log_file.is_open()) {
-                log_file << log_msg << std::endl;
-            }
-
             std::cerr << log_msg << std::endl;
         }
     }

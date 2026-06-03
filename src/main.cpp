@@ -60,8 +60,6 @@ int main(int argc, char* argv[]){
     // Ignore SIGPIPE so a broken client connection does not terminate the server.
     addsig(SIGPIPE, SIG_IGN);
 
-    Logger::get_instance()->init("server.log");
-
     const std::string jwt_secret = EnvUtils::get_env_or_default("JWT_SECRET", "");
     const int jwt_expires_seconds =
         EnvUtils::get_env_int_or_default("JWT_EXPIRES_SECONDS", 3600);

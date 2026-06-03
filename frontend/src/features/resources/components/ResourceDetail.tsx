@@ -9,6 +9,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { getAuthToken } from "@/features/auth/authStore";
 import { requestDownloadUrl } from "@/features/files/api";
+import { FileDownloadButton } from "@/features/files/components/FileDownloadButton";
 import { deleteResource, getResource, updateTextResource } from "../api";
 import type { ResourceFormValues } from "../types";
 import { ResourceForm } from "./ResourceForm";
@@ -27,6 +28,37 @@ function appendPdfFitFragment(url: string) {
 
 function isImageResource(title: string, content: string) {
   return /\.(png|jpe?g|gif|webp|bmp|svg)(\?|#|$)/i.test(`${title} ${content}`);
+}
+
+function safeFileName(fileName: string) {
+  const normalized = fileName.trim().replace(/[\\/:*?"<>|]+/g, "-");
+
+  return normalized || "resource";
+}
+
+function textDownloadFileName(title: string) {
+  const fileName = safeFileName(title || "resource");
+
+  if (/\.(txt|md|markdown)$/i.test(fileName)) {
+    return fileName;
+  }
+
+  return `${fileName}.md`;
+}
+
+function downloadTextResource(title: string, content: string) {
+  const blob = new Blob([content], {
+    type: "text/markdown;charset=utf-8",
+  });
+  const objectUrl = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+
+  link.href = objectUrl;
+  link.download = textDownloadFileName(title);
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(objectUrl);
 }
 
 export function ResourceDetail({ id }: ResourceDetailProps) {
@@ -229,6 +261,32 @@ export function ResourceDetail({ id }: ResourceDetailProps) {
                       </span>
                     )}
                   </div>
+                  {resourceQuery.data.is_file &&
+                  isImageResource(
+                    resourceQuery.data.title,
+                    resourceQuery.data.content,
+                  ) ? (
+                    <FileDownloadButton
+                      className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-slate-700 disabled:translate-y-0 disabled:opacity-50"
+                      fileName={resourceQuery.data.title}
+                      label="Download"
+                      resourceId={resourceQuery.data.id}
+                    />
+                  ) : null}
+                  {!resourceQuery.data.is_file ? (
+                    <button
+                      className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-slate-700"
+                      onClick={() =>
+                        downloadTextResource(
+                          resourceQuery.data.title,
+                          resourceQuery.data.content,
+                        )
+                      }
+                      type="button"
+                    >
+                      Download
+                    </button>
+                  ) : null}
                 </div>
 
                 {resourceQuery.data.is_file ? (
