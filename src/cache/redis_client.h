@@ -4,6 +4,8 @@
 #include <optional>
 #include <string>
 #include <mutex>
+#include <condition_variable>
+#include <queue>
 
 struct redisContext;
 
@@ -29,13 +31,21 @@ private:
     RedisClient(const RedisClient&) = delete;
     RedisClient& operator=(const RedisClient&) = delete;
 
+    redisContext* create_connection();
+    redisContext* get_connection();
+    void release_connection(redisContext* context);
+    void discard_connection(redisContext* context);
+    void clear_pool();
+
     std::string host_;
     int port_ = 6379;
     std::string password_;
     bool use_tls_ = false;
     bool available_ = false;
-    redisContext* context_ = nullptr;
+    int max_conn_ = 0;
+    std::queue<redisContext*> conn_pool_;
     mutable std::mutex mtx_;
+    std::condition_variable cv_;
 };
 
 #endif

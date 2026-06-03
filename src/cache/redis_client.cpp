@@ -4,6 +4,10 @@
 #include <hiredis/hiredis.h>
 #include <hiredis/hiredis_ssl.h>
 
+namespace {
+constexpr int DEFAULT_REDIS_POOL_SIZE = 10;
+}
+
 RedisClient* RedisClient::get_instance() {
     static RedisClient instance;
     return &instance;
@@ -11,10 +15,9 @@ RedisClient* RedisClient::get_instance() {
 
 RedisClient::~RedisClient() {
     std::lock_guard<std::mutex> lock(mtx_);
-    if (context_ != nullptr) {
-        redisFree(context_);
-        context_ = nullptr;
-    }
+    clear_pool();
+    available_ = false;
+    cv_.notify_all();
 }
 
 bool RedisClient::init(
@@ -24,30 +27,47 @@ bool RedisClient::init(
     bool use_tls) {
     std::lock_guard<std::mutex> lock(mtx_);
 
+    clear_pool();
+
     host_ = host;
     port_ = port;
     password_ = password;
     use_tls_ = use_tls;
+    max_conn_ = DEFAULT_REDIS_POOL_SIZE;
+    available_ = false;
 
-    if (context_ != nullptr) {
-        redisFree(context_);
-        context_ = nullptr;
-    }
-
-    context_ = redisConnect(host_.c_str(), port_);
-    if (context_ == nullptr || context_->err) {
-        std::string error = context_ == nullptr
-            ? "cannot allocate Redis context"
-            : context_->errstr;
-        Logger::get_instance()->log(ERROR, "Redis connection failed: " + error);
-
-        if (context_ != nullptr) {
-            redisFree(context_);
-            context_ = nullptr;
+    for (int i = 0; i < max_conn_; i++) {
+        redisContext* context = create_connection();
+        if (context == nullptr) {
+            clear_pool();
+            cv_.notify_all();
+            return false;
         }
 
-        available_ = false;
-        return false;
+        conn_pool_.push(context);
+    }
+
+    available_ = true;
+    cv_.notify_all();
+    Logger::get_instance()->log(
+        INFO,
+        "Redis cache connected with pool_size=" + std::to_string(max_conn_));
+    return true;
+}
+
+redisContext* RedisClient::create_connection() {
+    redisContext* context = redisConnect(host_.c_str(), port_);
+    if (context == nullptr || context->err) {
+        std::string error = context == nullptr
+            ? "cannot allocate Redis context"
+            : context->errstr;
+        Logger::get_instance()->log(ERROR, "Redis connection failed: " + error);
+
+        if (context != nullptr) {
+            redisFree(context);
+        }
+
+        return nullptr;
     }
 
     if (use_tls_) {
@@ -62,20 +82,16 @@ bool RedisClient::init(
 
         if (ssl_context == nullptr) {
             Logger::get_instance()->log(ERROR, "Redis TLS context creation failed");
-            redisFree(context_);
-            context_ = nullptr;
-            available_ = false;
-            return false;
+            redisFree(context);
+            return nullptr;
         }
 
-        if (redisInitiateSSLWithContext(context_, ssl_context) != REDIS_OK) {
-            std::string error = context_->errstr;
+        if (redisInitiateSSLWithContext(context, ssl_context) != REDIS_OK) {
+            std::string error = context->errstr;
             Logger::get_instance()->log(ERROR, "Redis TLS handshake failed: " + error);
             redisFreeSSLContext(ssl_context);
-            redisFree(context_);
-            context_ = nullptr;
-            available_ = false;
-            return false;
+            redisFree(context);
+            return nullptr;
         }
 
         redisFreeSSLContext(ssl_context);
@@ -83,42 +99,36 @@ bool RedisClient::init(
 
     if (!password_.empty()) {
         redisReply* reply = static_cast<redisReply*>(
-            redisCommand(context_, "AUTH %s", password_.c_str()));
+            redisCommand(context, "AUTH %s", password_.c_str()));
 
         if (reply == nullptr || reply->type == REDIS_REPLY_ERROR) {
-            std::string error = reply == nullptr ? context_->errstr : reply->str;
+            std::string error = reply == nullptr ? context->errstr : reply->str;
             Logger::get_instance()->log(ERROR, "Redis auth failed: " + error);
 
             if (reply != nullptr) {
                 freeReplyObject(reply);
             }
-            redisFree(context_);
-            context_ = nullptr;
-            available_ = false;
-            return false;
+            redisFree(context);
+            return nullptr;
         }
 
         freeReplyObject(reply);
     }
 
-    redisReply* reply = static_cast<redisReply*>(redisCommand(context_, "PING"));
+    redisReply* reply = static_cast<redisReply*>(redisCommand(context, "PING"));
     if (reply == nullptr || reply->type == REDIS_REPLY_ERROR) {
-        std::string error = reply == nullptr ? context_->errstr : reply->str;
+        std::string error = reply == nullptr ? context->errstr : reply->str;
         Logger::get_instance()->log(ERROR, "Redis ping failed: " + error);
 
         if (reply != nullptr) {
             freeReplyObject(reply);
         }
-        redisFree(context_);
-        context_ = nullptr;
-        available_ = false;
-        return false;
+        redisFree(context);
+        return nullptr;
     }
 
     freeReplyObject(reply);
-    available_ = true;
-    Logger::get_instance()->log(INFO, "Redis cache connected");
-    return available_;
+    return context;
 }
 
 bool RedisClient::is_available() const {
@@ -126,18 +136,83 @@ bool RedisClient::is_available() const {
     return available_;
 }
 
+redisContext* RedisClient::get_connection() {
+    std::unique_lock<std::mutex> lock(mtx_);
+    if (!available_) {
+        return nullptr;
+    }
+
+    cv_.wait(lock, [this] {
+        return !available_ || !conn_pool_.empty();
+    });
+
+    if (!available_ || conn_pool_.empty()) {
+        return nullptr;
+    }
+
+    redisContext* context = conn_pool_.front();
+    conn_pool_.pop();
+    return context;
+}
+
+void RedisClient::release_connection(redisContext* context) {
+    if (context == nullptr) {
+        return;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(mtx_);
+        if (!available_) {
+            redisFree(context);
+            return;
+        }
+
+        conn_pool_.push(context);
+    }
+
+    cv_.notify_one();
+}
+
+void RedisClient::discard_connection(redisContext* context) {
+    if (context != nullptr) {
+        redisFree(context);
+    }
+
+    redisContext* replacement = create_connection();
+    if (replacement != nullptr) {
+        release_connection(replacement);
+        return;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(mtx_);
+        available_ = false;
+        clear_pool();
+    }
+
+    cv_.notify_all();
+}
+
+void RedisClient::clear_pool() {
+    while (!conn_pool_.empty()) {
+        redisFree(conn_pool_.front());
+        conn_pool_.pop();
+    }
+    max_conn_ = 0;
+}
+
 std::optional<std::string> RedisClient::get(const std::string& key) {
-    std::lock_guard<std::mutex> lock(mtx_);
-    if (!available_ || context_ == nullptr) {
+    redisContext* context = get_connection();
+    if (context == nullptr) {
         return std::nullopt;
     }
 
     redisReply* reply = static_cast<redisReply*>(
-        redisCommand(context_, "GET %s", key.c_str()));
+        redisCommand(context, "GET %s", key.c_str()));
 
     if (reply == nullptr) {
-        Logger::get_instance()->log(ERROR, "Redis GET failed: " + std::string(context_->errstr));
-        available_ = false;
+        Logger::get_instance()->log(ERROR, "Redis GET failed: " + std::string(context->errstr));
+        discard_connection(context);
         return std::nullopt;
     }
 
@@ -147,45 +222,52 @@ std::optional<std::string> RedisClient::get(const std::string& key) {
     }
 
     freeReplyObject(reply);
+    release_connection(context);
     return result;
 }
 
 bool RedisClient::set(const std::string& key, const std::string& value, int ttl_seconds) {
-    std::lock_guard<std::mutex> lock(mtx_);
-    if (!available_ || context_ == nullptr || ttl_seconds <= 0) {
+    if (ttl_seconds <= 0) {
+        return false;
+    }
+
+    redisContext* context = get_connection();
+    if (context == nullptr) {
         return false;
     }
 
     redisReply* reply = static_cast<redisReply*>(
-        redisCommand(context_, "SETEX %s %d %b", key.c_str(), ttl_seconds, value.data(), value.size()));
+        redisCommand(context, "SETEX %s %d %b", key.c_str(), ttl_seconds, value.data(), value.size()));
 
     if (reply == nullptr) {
-        Logger::get_instance()->log(ERROR, "Redis SETEX failed: " + std::string(context_->errstr));
-        available_ = false;
+        Logger::get_instance()->log(ERROR, "Redis SETEX failed: " + std::string(context->errstr));
+        discard_connection(context);
         return false;
     }
 
     bool ok = reply->type == REDIS_REPLY_STATUS && std::string(reply->str) == "OK";
     freeReplyObject(reply);
+    release_connection(context);
     return ok;
 }
 
 bool RedisClient::del(const std::string& key) {
-    std::lock_guard<std::mutex> lock(mtx_);
-    if (!available_ || context_ == nullptr) {
+    redisContext* context = get_connection();
+    if (context == nullptr) {
         return false;
     }
 
     redisReply* reply = static_cast<redisReply*>(
-        redisCommand(context_, "DEL %s", key.c_str()));
+        redisCommand(context, "DEL %s", key.c_str()));
 
     if (reply == nullptr) {
-        Logger::get_instance()->log(ERROR, "Redis DEL failed: " + std::string(context_->errstr));
-        available_ = false;
+        Logger::get_instance()->log(ERROR, "Redis DEL failed: " + std::string(context->errstr));
+        discard_connection(context);
         return false;
     }
 
     bool ok = reply->type == REDIS_REPLY_INTEGER;
     freeReplyObject(reply);
+    release_connection(context);
     return ok;
 }
