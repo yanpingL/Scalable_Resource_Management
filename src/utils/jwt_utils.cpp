@@ -19,6 +19,7 @@ int JwtUtils::get_expires_seconds() {
     return EnvUtils::get_env_int_or_default("JWT_EXPIRES_SECONDS", 3600);
 }
 
+// Builds an HS256 JWT with issuer, subject, issued-at, and expiry claims.
 std::string JwtUtils::create_jwt(int user_id) {
     const std::string secret = get_secret();
     const int expires_seconds = get_expires_seconds();
@@ -36,6 +37,7 @@ std::string JwtUtils::create_jwt(int user_id) {
         .sign(jwt::algorithm::hs256{secret});
 }
 
+// Accepts only tokens signed with the configured secret and issuer.
 std::optional<int> JwtUtils::verify_jwt_and_get_user_id(const std::string& token) {
     const std::string secret = get_secret();
     if (secret.empty() || token.empty()) {
@@ -52,6 +54,8 @@ std::optional<int> JwtUtils::verify_jwt_and_get_user_id(const std::string& token
             .verify(decoded);
 
         const std::string subject = decoded.get_subject();
+
+        // The service stores the authenticated user id in the JWT subject claim.
         char* end = nullptr;
         long user_id = std::strtol(subject.c_str(), &end, 10);
         if (end == subject.c_str() || *end != '\0' || user_id <= 0) {
