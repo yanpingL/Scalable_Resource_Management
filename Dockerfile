@@ -86,6 +86,5 @@ COPY --from=build /opt/vcpkg-runtime /opt/vcpkg-runtime
 COPY --from=build /workspace/build/bin ./build/bin
 COPY db/migrations ./db/migrations
 COPY scripts ./scripts
-COPY src/resources ./src/resources
 
 CMD ["./build/bin/webserver", "8080"]

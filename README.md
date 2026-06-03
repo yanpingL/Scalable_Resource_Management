@@ -214,9 +214,8 @@ This layer owns the HTTP server mechanics:
 - Parses HTTP request lines, headers, and bodies.
 - Routes API requests by URL and method.
 - Builds HTTP responses
-- Serves static files from `src/resources`.
 
-Static file serving was added as early practice for the HTTP server and file response path. It is useful for learning and testing the lower-level webserver behavior, but it is not fully integrated into the current authenticated business logic. The main application flow is the JSON API plus MinIO-backed resource file upload/download.
+The backend now focuses on the JSON API plus MinIO-backed resource file upload/download flow. Unknown non-API routes return a normal HTTP not-found response instead of looking for files on disk.
 
 `http_conn.cpp` is the main request handler. It maps paths such as `/api/login`, `/api/resources`, `/api/files/upload-url`, and `/api/files/download-url` to handler functions.
 
@@ -999,7 +998,6 @@ The API tests expect the Docker services, both webserver processes, PostgreSQL t
 ## Notes
 
 - The backend usually does not download file bytes itself. It returns presigned URLs so the client uploads/downloads directly with MinIO.
-- Static file requests are mainly for initial HTTP server practice and are separate from the authenticated resource business logic.
 - The `content` column currently stores either plain text or a file public URL. A future improvement would be storing `object_key` in a separate database column.
 - If you change C++ source files, rebuild the server executable and restart both webserver processes.
 - If you change `Dockerfile`, rebuild the Docker images.

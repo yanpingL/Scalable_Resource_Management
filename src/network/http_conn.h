@@ -11,8 +11,6 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-#include <sys/stat.h>
-#include <sys/mman.h>
 #include <stdarg.h>
 #include <errno.h>
 #include <sys/uio.h>
@@ -35,7 +33,6 @@ public:
 
     static const int READ_BUFFER_SIZE = 65536;
     static const int WRITE_BUFFER_SIZE = 1024;
-    static const int FILENAME_LEN = 200;
 
     enum METHOD {GET = 0, POST = 1, HEAD = 2, PUT = 3, DELETE = 4};
     
@@ -51,16 +48,14 @@ public:
     /*
         Possible result of process_read
         NO_REQUEST          :   Request not complete, continue reading request
-        GET_REQUEST         :   get complete client request
         BAD_REQUEST         :   client request has grammar error
         NO_RESOURCE         :   No resource in server
         FORBIDDEN_REQUEST   :   no access to the resource
-        FILE_REQUEST        :   Request File, get file successfully
         INTERNAL_ERROR      :   Server intrenal error
         CLOSED_CONNECTION   :   client closed
     */
-    enum HTTP_CODE { NO_REQUEST, GET_REQUEST, BAD_REQUEST, NO_RESOURCE, 
-                    FORBIDDEN_REQUEST, FILE_REQUEST, INTERNAL_ERROR, CLOSED_CONNECTION,
+    enum HTTP_CODE { NO_REQUEST, BAD_REQUEST, NO_RESOURCE, 
+                    FORBIDDEN_REQUEST, INTERNAL_ERROR, CLOSED_CONNECTION,
                     GET_RESOURCE, ADD_RESOURCE, UPDATE_RESOURCE, DELETE_RESOURCE};
     
     // Line parser result while scanning CRLF-delimited HTTP input.
@@ -104,14 +99,9 @@ private:
     HTTP_CODE handle_create_download_url();
     HTTP_CODE handle_health();
 
-    // Static file serve
-    HTTP_CODE do_request();
-
-
     bool process_write(HTTP_CODE ret);
 
     // Response construction helpers used by process_write().
-    void unmap();
     bool add_response( const char* format, ... );
 
     bool add_status_line( int status, const char* title );
@@ -139,7 +129,6 @@ private:
     METHOD m_method;            // Parsed HTTP method.
 
 
-    char m_real_file[ FILENAME_LEN ];   // Resolved static file path.
     char* m_url;                        // Parsed request target.
     char* m_version;                    // Parsed HTTP version.
     char* m_host;                       // Parsed Host header.
@@ -153,9 +142,7 @@ private:
 
     char m_write_buf[ WRITE_BUFFER_SIZE ];  // Response header / small-body buffer.
     int m_write_index;                      // Next write position in m_write_buf.
-    char* m_file_address;                   // mmap address for static file responses.
-    struct stat m_file_stat;                // Metadata for the requested static file.
-    struct iovec m_iv[2];                   // writev buffers: headers plus body/file.
+    struct iovec m_iv[2];                   // writev buffers: headers plus JSON body.
     int m_iv_count;                         // Number of active iovec entries.
 };
 

@@ -15,15 +15,11 @@ const char* ok_200_title = "OK";
 const char* error_400_title = "Bad Request";
 const char* error_400_form = "Your request has bad syntax or is inherently impossible to satisfy.\n";
 const char* error_403_title = "Forbidden";
-const char* error_403_form = "You do not have permission to get file from this server.\n";
+const char* error_403_form = "You do not have permission to access this resource.\n";
 const char* error_404_title = "Not Found";
-const char* error_404_form = "The requested file was not found on this server.\n";
+const char* error_404_form = "The requested route was not found on this server.\n";
 const char* error_500_title = "Internal Error";
-const char* error_500_form = "There was an unusual problem serving the requested file.\n";
-
-
-// Root directory for static files inside the Docker/container workspace.
-const char* doc_root = "/workspace/src/resources";
+const char* error_500_form = "There was an unusual problem serving the request.\n";
 
 // epoll helper functions shared with main.cpp.
 void setnonblock(int fd){
@@ -136,7 +132,6 @@ bool http_conn::write(){
                 modfd(m_epollfd, m_sockfd, EPOLLOUT );
                 return true;
             }
-            unmap();
             return false;
         }
 
@@ -163,7 +158,6 @@ bool http_conn::write(){
         bytes_to_send = m_iv[0].iov_len +(m_iv_count == 2 ? m_iv[1].iov_len : 0);
 
         if ( bytes_to_send <= 0 ) {
-            unmap();
             if(m_linger) {
                 init();
                 modfd( m_epollfd, m_sockfd, EPOLLIN );
@@ -201,7 +195,6 @@ void http_conn::init(){
     m_start_line = 0;
     m_read_index = 0;
     m_write_index = 0;
-    m_file_address = 0;
     m_iv_count = 0;
 
     json_res = "";
@@ -210,8 +203,6 @@ void http_conn::init(){
 
     memset(m_read_buf, 0, READ_BUFFER_SIZE);
     memset(m_write_buf, 0, WRITE_BUFFER_SIZE);
-    memset(m_real_file, 0, FILENAME_LEN);
-    memset(&m_file_stat, 0, sizeof(m_file_stat));
     memset(m_iv, 0, sizeof(m_iv));
 }
 
@@ -242,8 +233,6 @@ http_conn::HTTP_CODE http_conn::process_read(){
                 ret = parse_headers(text);
                 if(ret == BAD_REQUEST){
                     return BAD_REQUEST;
-                } else if (ret == GET_REQUEST){
-                    return do_request();
                 } else if(ret == NO_REQUEST){
                     break;
                 }
@@ -252,9 +241,7 @@ http_conn::HTTP_CODE http_conn::process_read(){
             case CHECK_STATE_CONTENT:
             {
                 ret = parse_content(text);
-                if (ret == GET_REQUEST){
-                    return do_request();
-                } else if (ret != NO_REQUEST){
+                if (ret != NO_REQUEST){
                     return ret;
                 }
                 line_status = LINE_OPEN;
@@ -348,7 +335,7 @@ http_conn::HTTP_CODE http_conn::parse_request_line(char * text){
         apireq = 7;
     }
 
-    // Static file requests may arrive with an absolute URL.
+    // Normalize absolute-form request targets before continuing route checks.
     if (strncasecmp(m_url, "http://", 7) == 0 ){
         m_url += 7;
         m_url = strchr(m_url, '/');
@@ -387,8 +374,8 @@ http_conn::HTTP_CODE http_conn::parse_headers(char * text){
             return NO_REQUEST;
         }
 
-        // Fallback for static file serving.
-        return GET_REQUEST;
+        // This server is API-only; unsupported routes return 404.
+        return NO_RESOURCE;
 
 
     } else if (strncasecmp( text, "Connection:", 11 ) == 0 ) {
@@ -444,7 +431,7 @@ http_conn::HTTP_CODE http_conn::parse_content(char * text){
         } else if (m_method == POST && apireq == 5){
             return handle_create_upload_url(text);
         }
-        return GET_REQUEST;
+        return NO_RESOURCE;
     }
 
     return BAD_REQUEST;
@@ -823,32 +810,6 @@ http_conn::HTTP_CODE http_conn::handle_health() {
 }
 
 
-// Static file serving path: map a readable file into memory for writev().
-http_conn::HTTP_CODE http_conn::do_request(){
-
-    strcpy(m_real_file, doc_root );
-    int len = strlen( doc_root );
-    strncpy( m_real_file + len, m_url, FILENAME_LEN - len - 1 );
-
-    if ( stat( m_real_file, &m_file_stat ) < 0 ) {
-        return NO_RESOURCE;
-    }
-
-    if ( ! ( m_file_stat.st_mode & S_IROTH ) ) {
-        return FORBIDDEN_REQUEST;
-    }
-
-    if ( S_ISDIR( m_file_stat.st_mode ) ) {
-        return BAD_REQUEST;
-    }
-
-    int fd = open( m_real_file, O_RDONLY );
-    m_file_address = ( char* )mmap( 0, m_file_stat.st_size, PROT_READ, MAP_PRIVATE, fd, 0 );
-    close( fd );
-    return FILE_REQUEST;
-}
-
-
 // Write the response to the write buffer
 bool http_conn::process_write(HTTP_CODE ret) {
     // Local helper function to generate response where the body is stored in [json_res]
@@ -902,15 +863,6 @@ bool http_conn::process_write(HTTP_CODE ret) {
                 return false;
             }
             break;
-        case FILE_REQUEST:
-            add_status_line(200, ok_200_title );
-            add_headers(m_file_stat.st_size, "text");
-            m_iv[ 0 ].iov_base = m_write_buf;
-            m_iv[ 0 ].iov_len = m_write_index;
-            m_iv[ 1 ].iov_base = m_file_address;
-            m_iv[ 1 ].iov_len = m_file_stat.st_size;
-            m_iv_count = 2;
-            return true;
         case GET_RESOURCE:
             return add_json_response(200, ok_200_title);
         case ADD_RESOURCE:
@@ -929,16 +881,6 @@ bool http_conn::process_write(HTTP_CODE ret) {
     return true;
 }
 
-
-
-// Release memory-mapped static file content.
-void http_conn::unmap() {
-    if( m_file_address )
-    {
-        munmap( m_file_address, m_file_stat.st_size );
-        m_file_address = 0;
-    }
-}
 
 
 // Append printf-style formatted text to the response buffer.
