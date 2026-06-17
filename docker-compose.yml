@@ -83,6 +83,21 @@ services:
     depends_on:
       - web1
       - web2
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        API_BASE_URL: http://nginx
+    image: webserver-frontend-dev:latest
+    container_name: sys-frontend
+    environment:
+      API_BASE_URL: http://nginx
+    depends_on:
+      - nginx
+    ports:
+      - "3000:3000"
   
   postgres:
     image: postgres:16

@@ -567,6 +567,36 @@ origin through `MINIO_API_CORS_ALLOW_ORIGIN` in `docker-compose.yml`.
 `deploy/minio/cors.xml` is kept as a production bucket CORS policy template for
 S3-compatible storage that supports bucket-level CORS configuration.
 
+### AWS Backend Start/Stop Scripts
+
+Use these scripts to start or pause the AWS backend resources used by the
+cloud deployment:
+
+```bash
+scripts/aws_backend_status.sh
+scripts/aws_backend_start.sh
+scripts/aws_backend_stop.sh
+```
+
+Defaults:
+
+```text
+AWS_REGION=ap-southeast-2
+RDS_INSTANCE_ID=webserver-postgres
+ECS_CLUSTER=webserver-cluster
+ECS_SERVICE=webserver-service
+ECS_DESIRED_COUNT=1
+WAIT=true
+REDIS_REPLICATION_GROUP_ID=webserver-valkey
+```
+
+Override any value at runtime:
+
+```bash
+ECS_DESIRED_COUNT=1 scripts/aws_backend_start.sh
+WAIT=false scripts/aws_backend_stop.sh
+```
+
 ## Run The Project
 
 From the project root:
