@@ -12,7 +12,6 @@
 #include <signal.h>
 #include <libgen.h>
 
-#include "thread/locker.h"
 #include "thread/threadpool.h"
 #include "network/http_conn.h"
 #include "db/connection_pool.h"

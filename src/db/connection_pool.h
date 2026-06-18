@@ -2,9 +2,12 @@
 #define CONNECTION_POOL_H
 
 #include <libpq-fe.h>
+#include <memory>
+#include <mutex>
 #include <queue>
+#include <semaphore>
 #include <string>
-#include "thread/locker.h"
+
 #include "utils/logger.h"
 
 class connection_pool {
@@ -27,8 +30,8 @@ private:
     int cur_conn;
     int free_conn;
 
-    locker lock;
-    sem reserve;
+    std::mutex lock;
+    std::unique_ptr<std::counting_semaphore<>> reserve;
 
     std::queue<PGconn*> conn_list;
 

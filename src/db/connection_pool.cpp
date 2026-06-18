@@ -1,6 +1,5 @@
 #include <iostream>
 #include "connection_pool.h"
-#include "thread/locker.h"
 
 // Initializes connection counters for the singleton pool.
 connection_pool::connection_pool(){
@@ -58,20 +57,16 @@ void connection_pool::init(std::string url, std::string user,
         conn_list.push(conn);
         free_conn++;
     }
-    if (!reserve.init(free_conn)) {
-        Logger::get_instance()->log(ERROR, "Semaphore init error");
-        exit(1);
-    }
+    reserve = std::make_unique<std::counting_semaphore<>>(free_conn);
 }
 
 // Blocks until a connection is available, then leases it to the caller.
 PGconn* connection_pool::get_connection() {
     PGconn* conn = NULL;
 
-    reserve.wait();
-    lock.lock();
+    reserve->acquire();
+    std::lock_guard<std::mutex> guard(lock);
     if (conn_list.empty()) {
-        lock.unlock();
         return NULL;
     }
 
@@ -80,7 +75,6 @@ PGconn* connection_pool::get_connection() {
 
     free_conn--;
     cur_conn++;
-    lock.unlock();
 
     return conn;
 }
@@ -89,18 +83,19 @@ PGconn* connection_pool::get_connection() {
 bool connection_pool::release_connection(PGconn* conn) {
     if (!conn) return false;
 
-    lock.lock();
-    conn_list.push(conn);
-    free_conn++;
-    cur_conn--;
-
-    lock.unlock();
-    reserve.post();
+    {
+        std::lock_guard<std::mutex> guard(lock);
+        conn_list.push(conn);
+        free_conn++;
+        cur_conn--;
+    }
+    reserve->release();
 
     return true;
 }
 
 // Reports the number of currently idle PostgreSQL connections.
 int connection_pool::get_free_conn() {
+    std::lock_guard<std::mutex> guard(lock);
     return free_conn;
 }
