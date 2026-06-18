@@ -14,6 +14,15 @@ build/
 !.env.example
 !.env.production.example
 
+# local production deployment files
+/ecs-task-definition.json
+/deploy/aws/ecs-runtime-secrets-policy.json
+/deploy/aws/s3-cors.production.json
+/generated-ecs-task-definition.json
+/task-definition-full.json
+/migration-overrides.json
+/scripts/*.local.sh
+
 .devcontainer/
 
 # mac

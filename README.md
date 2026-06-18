@@ -1,576 +1,451 @@
-# C++ Auth Resource Server
+# Webserver
 
-A Scalable C++17 HTTP web server with JWT authentication, resource management, PostgreSQL persistence, Nginx load balancing, and MinIO file storage.
+Scalable C++ resource-management web application with JWT authentication,
+PostgreSQL persistence, Redis/Valkey caching, S3-compatible file storage, a
+Next.js frontend, Docker Compose local orchestration, and AWS ECS deployment.
 
-## What It Does
+Frontend deployment origin: [Resource_Management-frontend](https://webserver-frontend-zeta.vercel.app)
 
-This project exposes a small authenticated API for users and resources.
+## Features
 
-At the application level, it supports:
+- **C++ HTTP Backend** - Event-driven Linux server built with `epoll`, non-blocking sockets, and a worker thread pool
+- **JWT Authentication** - User registration, login, logout, signed bearer tokens, issuer checks, and expiry validation
+- **Resource CRUD** - Authenticated per-user create, list, read, update, and delete operations
+- **File Resource Flow** - Presigned upload/download URLs for S3-compatible storage so file bytes go directly between browser and object storage
+- **PostgreSQL Persistence** - Users, resource metadata, and migration tracking stored in PostgreSQL with connection pool
+- **Redis/Valkey Cache** - Optional cache for resource lists and single-resource reads with write invalidation
+- **Async Logging** - Thread-safe log queue with a dedicated worker thread for non-blocking request-path logging
+- **Thread-Safe Shared Infrastructure** - Synchronized worker queue, PostgreSQL pool, Redis pool, and async logger built with mutexes, semaphores, condition variables, and atomics
+- **Next.js Web Interface** - Login, registration, resource list/detail/create, and file upload pages
+- **Local Full Stack** - Docker Compose runs two backend containers, Nginx load balancing, frontend, PostgreSQL, Redis, MinIO, and init jobs
+- **CI/CD Automation** - GitHub Actions builds ARM64 backend images, runs C++ unit tests, pushes release images to ECR, runs migrations, and updates ECS Fargate
 
-- User registration.
-- User login and logout.
-- Token-based API authentication.
-- Resource CRUD operations.
-- Text resources stored directly in PostgreSQL.
-- File resources stored in MinIO, with the resource table storing the file URL.
-- Presigned MinIO upload URLs so clients can upload files directly to storage.
-- Presigned MinIO download URLs so clients can download files directly from storage.
-- Deleting a file resource also deletes the related MinIO object.
-- Python API tests for login, resource management, file upload/download URL flow, validation, and cleanup.
+## Tech Stack
 
-The typical file flow is:
+- **Backend**: C++20, Linux `epoll`, POSIX sockets, custom thread pool, async logger
+- **API/Data**: nlohmann-json, libpq/PostgreSQL, Redis or Valkey through hiredis
+- **Auth**: OpenSSL SHA-256 password hashing, jwt-cpp signed JWTs
+- **Storage**: MinIO locally, S3-compatible object storage in production
+- **Frontend**: Next.js 16, React 19, TypeScript, TanStack Query, Tailwind CSS
+- **Build/Test**: CMake, Ninja, vcpkg, GoogleTest, pytest, Vitest
+- **Runtime/Deploy**: Docker, Docker Compose, Nginx, AWS ECS Fargate, ECR, RDS, ElastiCache/Valkey, Secrets Manager, Vercel, Cloudwatch log
 
-```text
-Client Upload File:
-client -> backend: ask for upload URL
-backend -> client: return presigned MinIO PUT URL(upload) + public URL
-client -> MinIO: upload file bytes
-client -> backend: create resource with content=<public_url>, is_file=true
+## Project Structure
 
-Client Downlaod File:
-client -> backend: ask for download URL by resource_id
-backend -> client: return presigned MinIO GET URL
-client -> MinIO: download file bytes
-```
-
-## Project Highlights
-
-**Tech Stack:** C++, Linux `epoll`, multithreading, RESTful API, JWT, PostgreSQL, Docker, Nginx, Git.
-
-- Built a high-performance multi-user backend system supporting authenticated CRUD operations and file upload/download through RESTful APIs.
-- Implemented an event-driven HTTP server using `epoll`-based Reactor non-blocking I/O and a custom thread pool, avoiding thread-per-connection overhead.
-- Designed a layered `Network -> Service -> DAO` architecture to separate HTTP handling, business logic, and database access.
-- Developed a thread-safe PostgreSQL connection pool with semaphore-based control to reduce connection contention under concurrent workloads.
-- Implemented stateless JWT bearer authentication with signed access tokens and expiry validation.
-- Deployed multiple C++ server instances behind Nginx load balancing and containerized the full system with Docker Compose.
-- Benchmarked approximately **4.9k requests/sec** under **1,000 concurrent connections** through Nginx load balancing, with **p90 latency around 221 ms**, **p99 latency around 247 ms**, and **0 errors** during the test.
-
-## Benchmark Summary
-
-Example load test result:
-
-```text
-Concurrency: 1,000
-Throughput: ~4.9k requests/sec
-p90 latency: ~221 ms
-p99 latency: ~247 ms
-Errors: 0
-```
-
-## Architecture
-
-### Project Directory Structure
+<details>
+<summary><h3>Folder Tree</h3></summary>
 
 ```text
 .
-├── db
-│   └── schema.sql
-├── src
-│   ├── dao
-│   ├── db
-│   ├── network
-│   ├── resources
-│   │   └── images
-│   ├── service
-│   ├── thread
-│   └── utils
-└── tests
+├── src/                         # C++ backend source code
+│   ├── main.cpp                 # Server boot, env loading, DB/cache init, epoll loop
+│   ├── network/                 # HTTP parsing, routing, socket read/write handling, response generation
+│   ├── thread/                  # Worker thread pool
+│   ├── service/                 # User, resource, and storage business logic
+│   ├── dao/                     # PostgreSQL data access objects
+│   ├── db/                      # PostgreSQL connection pool
+│   ├── cache/                   # Redis client and resource cache helpers
+│   └── utils/                   # JWT, auth, env, and logging utilities
+│
+├── frontend/                    # Next.js frontend application
+│   ├── src/app/                 # App Router pages and layout
+│   ├── src/features/            # Auth, resource, and file feature modules
+│   ├── src/shared/              # Shared API client
+│   ├── tests/                   # Vitest frontend tests
+│   ├── Dockerfile               # Frontend container image
+│   └── package.json             # Frontend scripts and dependencies
+│
+├── db/                          # Database schema and ordered migrations
+│   ├── schema.sql               # Local Compose bootstrap schema
+│   └── migrations/              # Production migration files and migration README
+│
+├── tests/                       # Backend unit and API tests
+│   ├── unit_tests.cpp           # GoogleTest tests
+│   └── api_tests.py             # pytest API/integration tests
+│
+├── scripts/                     # Migration and AWS resource helper scripts
+├── deploy/                      # AWS and MinIO/S3 deployment templates
+├── vcpkg-triplets/              # Release triplets for Linux ARM64 and x64
+├── .github/workflows/           # CI and backend deployment workflows
+├── Dockerfile                   # Backend build/runtime image
+├── docker-compose.yml           # Local full-stack environment
+├── nginx.conf                   # Local Nginx load balancer
+├── ecs-task-definition.json     # ECS Fargate backend task definition
+├── CMakeLists.txt               # Backend build and test targets
+└── .env.production.example      # Backend production environment checklist
 ```
 
-### System Flow Model
+Runtime files such as real `.env` files, database volumes, object-storage
+volumes, build directories, logs, and private credentials should stay out of
+Git.
 
-The project can be understood in two layers: the deployed system around the server, and the internal request path inside each C++ webserver process.
+</details>
+
+## Functional Architecture
 
 ```text
-Client
-  |
-  v
-Nginx reverse proxy / load balancer
-  |
-  +-- sys-web-1: C++ webserver
-  |
-  +-- sys-web-2: C++ webserver
-
-Shared backend services used by both webservers:
-
-  PostgreSQL
-    - Persistent users and resource metadata.
-    - Accessed through DAO classes and the connection pool.
-
-  MinIO
-    - Object storage for uploaded file bytes.
-    - Backend creates presigned upload/download URLs.
-    - Client uploads/downloads file bytes directly with MinIO.
+Browser
+  -> Next.js frontend :3000
+      -> /api/* rewrite
+          -> Nginx load balancer :8080
+              -> web1 C++ backend :8080
+              -> web2 C++ backend :8080
+                  -> PostgreSQL :5432
+                  -> Redis/Valkey :6379
+                  -> MinIO or S3-compatible object storage
 ```
 
-Inside each C++ webserver, a request moves through the program like this:
+Inside each backend process:
 
 ```text
 main.cpp
-  - Creates listen socket.
-  - Uses epoll to tack client connections.
-  - Accepts new sockets and assigns them to http_conn objects.
-  - Pushes readable connections into the thread pool.
+  -> creates listen socket
+  -> registers client sockets with epoll
+  -> reads/writes sockets in the main event loop
+  -> dispatches complete requests to threadpool workers
 
-threadpool
-  - Worker threads call http_conn::process().
-
-Network layer: http_conn
-  - Read from connection socket to read buffer in main thread
-  - or Write from connection write buffer to socket in main thread
-  - Parse request line, headers, and body in worker threads
-  - Routes to Service layer by method and URL.
-  - Builds HTTP response buffers.
-  - Registers EPOLLOUT so the main event loop can send the response.
+http_conn
+  -> parses HTTP request line, headers, and body
+  -> routes /api/* and /health endpoints
+  -> validates bearer tokens for authenticated routes
+  -> serializes JSON responses
 
 Service layer
-  - Owns business rules.
-  - Handles login, resource CRUD, file URL creation, and file cleanup.
+  -> applies auth, resource, storage, and file cleanup rules
 
-DAO layer
-  - Converts service requests into PostgreSQL operations.
-  - Reads and writes users and resources.
+DAO/cache/storage adapters
+  -> PostgreSQL connection pool
+  -> Redis/Valkey resource cache
+  -> S3/MinIO presigned URL generation and object deletion
 
-Database/auth/storage adapters
-  - Connection pool manages PostgreSQL connections.
-  - JWT utilities sign and verify bearer tokens.
-  - Storage service signs MinIO presigned URLs.
+Async logger
+  -> request threads enqueue timestamped log lines
+  -> dedicated logger thread flushes entries to stderr
 ```
 
-For normal authenticated resource requests, the practical flow is:
+## API
+
+| Feature | Method | Path | Auth | Description |
+|---------|--------|------|------|-------------|
+| Health check | GET | `/health` | No | Load balancer/container health response |
+| Register | POST | `/api/register` | No | Create a user |
+| Login | POST | `/api/login` | No | Return JWT token and user ID |
+| Logout | POST | `/api/logout` | Yes | Validate token and return client-side logout success |
+| List resources | GET | `/api/resources` | Yes | List resources owned by the current user |
+| Get resource | GET | `/api/resources?id=:id` | Yes | Read one resource owned by the current user |
+| Create resource | POST | `/api/resources` | Yes | Create text or file resource metadata |
+| Update resource | PUT | `/api/resources` | Yes | Update owned resource title/content |
+| Delete resource | DELETE | `/api/resources?id=:id` | Yes | Delete owned resource and object-storage file when needed |
+| Upload URL | POST | `/api/files/upload-url` | Yes | Create presigned object-storage PUT URL |
+| Download URL | GET | `/api/files/download-url?resource_id=:id` | Yes | Create presigned object-storage GET URL for a file resource |
+
+## Core Workflows
+
+<details>
+<summary><h3>Authentication Workflow</h3></summary>
+
+```text
+1. Client registers through POST /api/register
+2. Client logs in through POST /api/login
+3. Backend verifies the password hash and signs a JWT
+4. Client sends Authorization: Bearer <token> on protected requests
+5. Backend validates signature, issuer, subject, and expiry
+6. Logout is stateless; the client removes the token locally
+```
+
+The backend does not keep a server-side JWT denylist. Tokens remain valid until
+their configured expiration time.
+
+</details>
+
+<details>
+<summary><h3>Concurrency Safety Pattern</h3></summary>
+
+Shared backend infrastructure is designed for concurrent request processing:
+
+```text
+Thread pool
+  -> mutex-protected work queue
+  -> counting semaphore wakes workers when tasks are available
+  -> atomic stop flag coordinates shutdown
+
+PostgreSQL connection pool
+  -> mutex-protected PGconn queue
+  -> counting semaphore bounds concurrent leases
+
+Redis/Valkey connection pool
+  -> mutex-protected hiredis context queue
+  -> condition variable waits for available connections
+  -> failed connections are discarded and replaced when possible
+
+Async logger
+  -> mutex-protected log queue
+  -> condition variable wakes the logging thread
+  -> request threads enqueue and return quickly
+```
+
+</details>
+
+<details>
+<summary><h3>Resource CRUD Workflow</h3></summary>
 
 ```text
 Client request
   -> Nginx
-  -> one C++ webserver
-  -> epoll/main thread receives socket event
-  -> thread pool processes http_conn
-  -> UserService validates JWT signature, issuer, and expiry
-  -> ResourceService handles business logic
-  -> ResourceDAO uses PostgreSQL connection pool
-  -> http_conn builds JSON response
-  -> socket write sends response back through Nginx
+  -> one C++ backend container
+  -> JWT validation
+  -> ResourceService
+  -> Redis resource cache lookup when enabled
+  -> ResourceDAO
+  -> PostgreSQL
+  -> JSON response
 ```
 
-For file upload/download, the backend does not stream file bytes itself. It only creates signed URLs:
+Resource lists and individual resources are cached when Redis/Valkey is
+available. Creates, updates, and deletes invalidate the affected resource keys
+and the owning user's resource-list key.
+
+</details>
+
+<details>
+<summary><h3>File Upload and Download Workflow</h3></summary>
+
+The backend does not normally stream uploaded or downloaded file bytes.
+Instead, it signs short-lived storage URLs.
 
 ```text
 Upload:
-client -> backend -> MinIO presigned PUT URL
-client -> MinIO uploads bytes directly
-client -> backend creates resource row with public_url
+1. Client asks POST /api/files/upload-url for a signed PUT URL
+2. Backend validates filename/content type and signs an object key
+3. Client uploads bytes directly to MinIO/S3 with PUT
+4. Client creates a resource row with content=<public_url> and is_file=true
 
 Download:
-client -> backend asks by resource_id
-backend -> PostgreSQL finds file resource
-backend -> MinIO presigned GET URL
-client -> MinIO downloads bytes directly
+1. Client asks GET /api/files/download-url?resource_id=:id
+2. Backend verifies ownership and requires is_file=true
+3. Backend signs a short-lived GET URL
+4. Client downloads bytes directly from MinIO/S3
+
+Delete:
+1. Client deletes the file resource through DELETE /api/resources?id=:id
+2. Backend deletes the object-storage file
+3. Backend deletes the PostgreSQL resource row
 ```
 
-The project uses two main storage systems:
+</details>
 
-- **PostgreSQL** is the persistent database. It stores users and resource metadata.
-- **MinIO** is the object storage layer. It stores uploaded file bytes, while PostgreSQL stores the related resource metadata and public file URL.
+<details>
+<summary><h3>CI/CD Workflow</h3></summary>
 
-Main PostgreSQL tables:
-
-```sql
-users (
-    id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
-    email VARCHAR(255) NOT NULL UNIQUE,
-    password VARCHAR(255) NOT NULL
-)
-
-resources (
-    id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    user_id INT NOT NULL,
-    title VARCHAR(255),
-    content TEXT,
-    is_file BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-)
-```
-
-For text resources, `resources.content` stores the text body. For file resources, `resources.content` stores the MinIO public URL and `resources.is_file` is `true`.
-
-### Network Layer
-
-Files:
-
-- `src/main.cpp`
-- `src/network/http_conn.h`
-- `src/network/http_conn.cpp`
-- `src/thread/threadpool.h`
-- `src/thread/locker.h`
-
-This layer owns the HTTP server mechanics:
-
-- Creates the listening socket.
-- Uses `epoll` for event-driven IO.
-- Uses a multithreading thread pool to process requests.
-- Parses HTTP request lines, headers, and bodies.
-- Routes API requests by URL and method.
-- Builds HTTP responses
-
-The backend now focuses on the JSON API plus MinIO-backed resource file upload/download flow. Unknown non-API routes return a normal HTTP not-found response instead of looking for files on disk.
-
-`http_conn.cpp` is the main request handler. It maps paths such as `/api/login`, `/api/resources`, `/api/files/upload-url`, and `/api/files/download-url` to handler functions.
-
-### Service Layer
-
-Files:
-
-- `src/service/user_service.cpp`
-- `src/service/resource_service.cpp`
-- `src/service/storage_service.cpp`
-
-This layer owns business logic:
-
-- `UserService`: register/login behavior, password verification, JWT creation and verification.
-- `ResourceService`: resource list/get/update/delete behavior, file-resource checks, delete-file cleanup.
-- `StorageService`: MinIO URL generation, AWS Signature V4 signing, upload validation, file deletion.
-
-The service layer sits between HTTP handlers and DAO/storage code.
-
-### DAO Layer
-
-Files:
-
-- `src/dao/user_dao.cpp`
-- `src/dao/resource_dao.cpp`
-
-This layer talks to PostgreSQL:
-
-- `UserDAO`: user creation and lookup.
-- `ResourceDAO`: create, list, get, update, and delete resources.
-
-### Database Layer
-
-Files:
-
-- `src/db/connection_pool.cpp`
-- `src/db/connection_pool.h`
-
-This layer manages a pool of PostgreSQL connections. The server initializes it in `src/main.cpp` with:
-
-```cpp
-connPool->init("postgres", "webuser", "webpass123", "webdb", 5432, 10);
-```
-
-### Storage Layer
-
-Files:
-
-- `src/service/storage_service.cpp`
-- `docker-compose.yml`
-
-MinIO stores uploaded file bytes. The backend does not usually stream file bytes through itself. Instead, it generates presigned URLs:
-
-- `PUT` presigned URL for upload.
-- `GET` presigned URL for download.
-- MinIO SDK object delete used internally when deleting file resources.
-
-### Utility Layer
-
-Files:
-
-- `src/utils/auth_utils.h`
-- `src/utils/env_utils.h`
-- `src/utils/jwt_utils.cpp`
-- `src/utils/jwt_utils.h`
-- `src/utils/logger.cpp`
-- `src/utils/logger.h`
-
-This layer contains password hashing helpers, environment helpers, JWT signing/verification, and thread-safe logging.
-
-## Main API Endpoints
-
-### `POST /api/register`
-
-Registers a user.
-
-Body:
-
-```json
-{
-  "name": "Alice",
-  "email": "alice@test.com",
-  "password": "password"
-}
-```
-
-Logic:
-
-- Parses JSON.
-- Validates required fields.
-- Hashes/stores user information through service and DAO layers.
-- Returns success or error JSON.
-
-### `POST /api/login`
-
-Logs in a user.
-
-Body:
-
-```json
-{
-  "email": "andrew@test.com",
-  "password": "hash3"
-}
-```
-
-Logic:
-
-- Looks up user by email.
-- Verifies password.
-- Creates a signed JWT access token.
-- Sets issuer, subject, issued-at, and expiration claims.
-- Returns `token` and `user_id`.
-
-### `POST /api/logout`
-
-Logs out the current user.
-
-Header:
+GitHub Actions CI runs on pushes and pull requests. Backend CD runs on pushes
+to backend-related paths or by manual workflow dispatch.
 
 ```text
-Authorization: Bearer <token>
+CI:
+1. Build linux/arm64 backend Docker image
+2. Run C++ unit tests inside the built image
+
+CD:
+1. Assume AWS IAM role through GitHub OIDC
+2. Build linux/arm64 backend Docker image
+3. Push image to Amazon ECR
+4. Render and register ECS task definition
+5. Run one-off ECS migration task
+6. Wait for migrations and print ECS/CloudWatch diagnostics on failure
+7. Update ECS service and wait for service stability
 ```
 
-Logic:
+Backend production secrets are provided through ECS task secrets, backed by AWS
+Secrets Manager. The frontend is deployed separately from the `frontend`
+directory, typically through Vercel with `API_BASE_URL` pointing to the public
+backend origin.
 
-- Validates token.
-- Returns success and lets the client delete its local token.
-- Does not revoke the JWT server-side; the old token remains valid until its expiration time.
+</details>
 
-### `GET /api/resources`
+## Project Launch
 
-Lists resources owned by the authenticated user.
+<details>
+<summary><h3>Quick Start Locally</h3></summary>
 
-Header:
+### Requirements
+
+- Docker or Docker Desktop
+- CMake/Ninja only if building outside Docker
+- Node.js `>=24.9.0` and npm `>=11.6.0` only if running the frontend outside Docker
+
+### Start The Full Docker Stack
+
+```bash
+docker compose build
+docker compose up -d
+```
+
+This starts:
 
 ```text
-Authorization: Bearer <token>
+frontend     Next.js app at localhost:3000
+nginx        Load balancer at localhost:8080
+web1         C++ backend, direct port localhost:8081
+web2         C++ backend, direct port localhost:8082
+postgres     PostgreSQL 16 at localhost:5432
+db-init      One-shot schema initializer
+redis        Redis cache at localhost:6379
+minio        Object storage API at localhost:9000, console at localhost:9001
+minio-init   One-shot bucket initializer
 ```
 
-Logic:
+Open:
 
-- Validates token.
-- Finds user ID.
-- Loads resources for that user from PostgreSQL.
-- Returns JSON array including `id`, `title`, `content`, and `is_file`.
+- Frontend: [http://localhost:3000](http://localhost:3000)
+- Backend health: [http://localhost:8080/health](http://localhost:8080/health)
+- MinIO console: [http://localhost:9001](http://localhost:9001)
 
-### `GET /api/resources?id=X`
-
-Gets one resource owned by the authenticated user.
-
-Logic:
-
-- Validates token.
-- Validates `id`.
-- Loads resource by `user_id + id`.
-- Returns text resource or file resource metadata.
-
-### `POST /api/resources`
-
-Creates a resource.
-
-Text resource body:
-
-```json
-{
-  "title": "Note",
-  "content": "hello",
-  "is_file": false
-}
-```
-
-File resource body:
-
-```json
-{
-  "title": "Uploaded file",
-  "content": "http://localhost:9000/webserver-files/users/1/uploads/file.txt",
-  "is_file": true
-}
-```
-
-Logic:
-
-- Validates token.
-- Reads `title`, `content`, and optional `is_file`.
-- Stores the row in PostgreSQL.
-- If `is_file=true`, `content` should be the MinIO public URL.
-
-### `PUT /api/resources`
-
-Updates a resource.
-
-Body:
-
-```json
-{
-  "id": 1001,
-  "title": "New title",
-  "content": "new content"
-}
-```
-
-Logic:
-
-- Validates token.
-- Validates `id`.
-- Updates allowed fields for a resource owned by the user.
-
-### `DELETE /api/resources?id=X`
-
-Deletes a resource.
-
-Logic:
-
-- Validates token.
-- Loads resource by `user_id + id`.
-- If `is_file=true`, deletes the object from MinIO.
-- Deletes the database row.
-
-### `POST /api/files/upload-url`
-
-Creates a presigned MinIO upload URL.
-
-Body:
-
-```json
-{
-  "filename": "report.pdf",
-  "content_type": "application/pdf"
-}
-```
-
-Logic:
-
-- Validates token.
-- Validates filename and content type.
-- Rejects path traversal and blocked extensions.
-- Creates an object key under `users/<user_id>/uploads/...`.
-- Returns a presigned `PUT` URL and a `public_url`.
-
-### `GET /api/files/download-url?resource_id=X`
-
-Creates a presigned MinIO download URL for a file resource.
-
-Logic:
-
-- Validates token.
-- Loads the resource by `user_id + resource_id`.
-- Requires `is_file=true`.
-- Extracts MinIO object key from the stored public URL.
-- Returns a presigned `GET` URL.
-
-## Environment
-
-The Docker Compose environment runs:
-
-- `sys-nginx`: reverse proxy and load balancer, exposed at `localhost:8080`.
-- `sys-web-1`: first C++ server container, exposed directly at `localhost:8081`.
-- `sys-web-2`: second C++ server container, exposed directly at `localhost:8082`.
-- `sys-postgres`: PostgreSQL 16, exposed at `localhost:5432`.
-- `sys-db-init`: one-shot PostgreSQL schema initializer.
-- `sys-minio`: MinIO object storage, API at `localhost:9000`, console at `localhost:9001`.
-- `sys-minio-init`: one-shot MinIO bucket initializer.
-
-Important configured values:
-
-```yaml
-POSTGRES_DB: webdb
-POSTGRES_USER: webuser
-POSTGRES_PASSWORD: webpass123
-POSTGRES_HOST: postgres
-POSTGRES_PORT: 5432
-
-S3_ENDPOINT: http://minio:9000
-S3_PUBLIC_ENDPOINT: http://localhost:9000
-S3_BUCKET: webserver-files
-S3_ACCESS_KEY: minioadmin
-S3_SECRET_KEY: minioadmin
-S3_UPLOAD_URL_EXPIRES: 300
-S3_DOWNLOAD_URL_EXPIRES: 300
-S3_MAX_FILENAME_LENGTH: 255
-
-JWT_SECRET: change-me-to-a-long-random-secret-before-production
-JWT_ISSUER: webserver
-JWT_EXPIRES_SECONDS: 3600
-```
-
-Use a strong random `JWT_SECRET` for real deployments. The sample value is only for local development.
-
-### Production Environment Variables
-
-Use `.env.production.example` as the deployment checklist for the backend. Do
-not commit a real production `.env` file.
-
-Backend values belong in the ECS task definition. Sensitive values should come
-from AWS Secrets Manager or SSM Parameter Store instead of plain text task
-environment variables.
+MinIO local credentials:
 
 ```text
-POSTGRES_HOST
-POSTGRES_PORT
-POSTGRES_DB
-POSTGRES_USER
-POSTGRES_PASSWORD  # secret
-
-JWT_SECRET         # secret
-JWT_ISSUER
-JWT_EXPIRES_SECONDS
-
-S3_ENDPOINT
-S3_PUBLIC_ENDPOINT
-S3_BUCKET
-S3_ACCESS_KEY   # secret, unless replaced by an IAM role flow later
-S3_SECRET_KEY   # secret, unless replaced by an IAM role flow later
-S3_REGION
-S3_UPLOAD_URL_EXPIRES
-S3_DOWNLOAD_URL_EXPIRES
-S3_MAX_FILENAME_LENGTH
-```
-
-The backend prefers `S3_*` names for application storage settings. Legacy
-`MINIO_*` names still work as fallbacks for older local environments. MinIO
-server-specific values such as `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`, and
-`MINIO_API_CORS_ALLOW_ORIGIN` are still used only by the local MinIO container.
-
-Frontend values belong in the Vercel project environment variables:
-
-```text
-API_BASE_URL
-```
-
-Set `API_BASE_URL` to the public backend origin, for example
-`https://api.example.com`. Do not include `/api`; the frontend rewrite appends
-that path. Vercel environment variable changes affect new deployments, so
-redeploy the frontend after changing this value.
-
-MinIO console login:
-
-```text
-URL: http://localhost:9001
 Username: minioadmin
 Password: minioadmin
 ```
 
-The `webserver-files` bucket is created automatically by `sys-minio-init`.
-Local MinIO allows browser file upload/preview requests from the Next.js dev
-origin through `MINIO_API_CORS_ALLOW_ORIGIN` in `docker-compose.yml`.
-`deploy/minio/cors.xml` is kept as a production bucket CORS policy template for
-S3-compatible storage that supports bucket-level CORS configuration.
+Stop the stack:
 
-### AWS Backend Start/Stop Scripts
+```bash
+docker compose down
+```
 
-Use these scripts to start or pause the AWS backend resources used by the
-cloud deployment:
+To remove local volumes as well:
+
+```bash
+docker compose down -v
+```
+
+</details>
+
+<details>
+<summary><h3>Common Commands</h3></summary>
+
+### Backend Docker
+
+```bash
+docker compose config
+docker compose ps
+docker compose logs -f nginx web1 web2
+docker compose up db-init minio-init --no-recreate --abort-on-container-exit
+```
+
+### Backend Tests
+
+Run C++ unit tests inside a backend container:
+
+```bash
+docker exec sys-web-1 bash -lc "cd /workspace && cmake --build build --target unit_tests && ./build/bin/unit_tests"
+```
+
+Run Python API tests against the local Nginx entrypoint:
+
+```bash
+python3 -m pytest tests/api_tests.py
+```
+
+Use another backend URL with:
+
+```bash
+BASE_URL=http://localhost:8081 python3 -m pytest tests/api_tests.py
+```
+
+### Frontend
+
+```bash
+cd frontend
+cp .env.example .env.local
+npm install
+npm run dev
+npm run test
+npm run build
+```
+
+For local development, `frontend/.env.local` normally uses:
+
+```env
+API_BASE_URL=http://localhost:8080
+```
+
+</details>
+
+<details>
+<summary><h3>Local Runtime Configuration</h3></summary>
+
+Docker Compose sets the backend environment for local development:
+
+```text
+POSTGRES_HOST=postgres
+POSTGRES_PORT=5432
+POSTGRES_DB=webdb
+POSTGRES_USER=webuser
+POSTGRES_PASSWORD=webpass123
+
+REDIS_ENABLED=true
+REDIS_HOST=redis
+REDIS_PORT=6379
+
+S3_ENDPOINT=http://minio:9000
+S3_PUBLIC_ENDPOINT=http://localhost:9000
+S3_BUCKET=webserver-files
+S3_ACCESS_KEY=minioadmin
+S3_SECRET_KEY=minioadmin
+S3_UPLOAD_URL_EXPIRES=300
+S3_DOWNLOAD_URL_EXPIRES=300
+S3_MAX_FILENAME_LENGTH=255
+
+JWT_SECRET=change-me-to-a-long-random-secret-before-production
+JWT_ISSUER=webserver
+JWT_EXPIRES_SECONDS=3600
+```
+
+Use a strong random `JWT_SECRET` outside local development.
+
+The local database schema is applied from `db/schema.sql`. Production-style
+migrations live in `db/migrations` and are applied by `scripts/run_migrations.sh`.
+
+</details>
+
+<details>
+<summary><h3>AWS Backend Deployment</h3></summary>
+
+The backend deployment workflow is:
+
+```text
+.github/workflows/deploy-backend.yml
+```
+
+Environment configuration expected by the GitHub `production` environment:
+
+```text
+Secret:
+AWS_ROLE_TO_ASSUME=arn:aws:iam::<account-id>:role/<github-actions-deploy-role>
+
+Variables:
+ECS_CLUSTER=webserver-cluster
+ECS_SERVICE=webserver-service
+```
+
+The ECS task definition is:
+
+```text
+ecs-task-definition.json
+```
+
+Backend production variables are listed in:
+
+```text
+.env.production.example
+```
+
+Sensitive values such as `POSTGRES_PASSWORD`, `JWT_SECRET`, `S3_ACCESS_KEY`,
+`S3_SECRET_KEY`, and `REDIS_PASSWORD` should come from AWS Secrets Manager or
+SSM Parameter Store rather than plain task environment variables.
+
+AWS helper scripts:
 
 ```bash
 scripts/aws_backend_status.sh
@@ -578,7 +453,7 @@ scripts/aws_backend_start.sh
 scripts/aws_backend_stop.sh
 ```
 
-Defaults:
+Default AWS helper values:
 
 ```text
 AWS_REGION=ap-southeast-2
@@ -590,125 +465,50 @@ WAIT=true
 REDIS_REPLICATION_GROUP_ID=webserver-valkey
 ```
 
-Override any value at runtime:
+Example:
 
 ```bash
+scripts/aws_backend_status.sh
 ECS_DESIRED_COUNT=1 scripts/aws_backend_start.sh
 WAIT=false scripts/aws_backend_stop.sh
 ```
 
-## Run The Project
+</details>
 
-From the project root:
+<details>
+<summary><h3>Frontend Deployment</h3></summary>
 
-```bash
-cd /Volumes/codefield/webserver
-```
-
-Build and start the containers:
-
-```bash
-docker compose build
-docker compose up -d
-```
-
-The backend Docker image builds `build/bin/webserver` during image build and
-starts it with:
-
-```bash
-./build/bin/webserver 8080
-```
-
-During startup, Docker Compose also runs two idempotent initialization jobs:
-
-- `db-init`: applies `db/schema.sql` and creates PostgreSQL tables with `CREATE TABLE IF NOT EXISTS`.
-- `minio-init`: creates the `webserver-files` bucket with `mc mb --ignore-existing`.
-
-If the tables or bucket already exist, these jobs leave them unchanged.
-
-For production S3-compatible storage, apply an equivalent bucket CORS policy for
-the deployed frontend origin. Keep `PUT`, `GET`, and `HEAD` allowed, allow the
-`Content-Type` request header, and expose `ETag`.
-
-To run the initialization jobs manually for verification:
-
-```bash
-docker compose up db-init minio-init --no-recreate --abort-on-container-exit
-```
-
-To validate the Compose file itself:
-
-```bash
-docker compose config
-```
-
-Check that the containers are running:
-
-```bash
-docker ps
-```
-
-
-The main API entry point is:
+The frontend is a monorepo subproject. In Vercel, use:
 
 ```text
-http://localhost:8080
+Root Directory: frontend
+Framework Preset: Next.js
+Install Command: npm install
+Build Command: npm run build
+Output Directory: .next
 ```
 
-The health check endpoint is:
+Set:
+
+```env
+API_BASE_URL=https://your-public-backend-origin
+```
+
+Do not include `/api`; the Next.js rewrite appends `/api/:path*`.
+
+When the frontend origin changes, also update the S3-compatible bucket CORS
+policy. The production S3 CORS template is:
 
 ```text
-GET http://localhost:8080/health
+deploy/aws/s3-cors.production.json
 ```
 
-It returns `200 {"status":"ok"}` without requiring authentication.
+</details>
 
-This goes through Nginx and load-balances between `web1` and `web2`.
+## Example API Usage
 
-## Database Setup
-
-Database setup is automatic when you run `docker compose up -d`. The schema lives in:
-
-```text
-db/schema.sql
-```
-
-The initializer applies it with `CREATE TABLE IF NOT EXISTS`, so rebuilding or recreating containers is safe.
-
-To inspect the database manually:
-
-```bash
-docker exec -it sys-postgres psql -U webuser -d webdb
-```
-
-The current schema is:
-
-```sql
-CREATE TABLE users (
-    id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
-    email VARCHAR(255) NOT NULL UNIQUE,
-    password VARCHAR(255) NOT NULL
-);
-
-CREATE TABLE resources (
-    id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    user_id INT NOT NULL,
-    title VARCHAR(255),
-    content TEXT,
-    is_file BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT fk_resources_user
-        FOREIGN KEY (user_id)
-        REFERENCES users(id)
-        ON DELETE CASCADE
-);
-```
-
-The API tests create and clean up their own records through the HTTP API. For manual testing, you can create a sample user and resources from a local terminal.
-
-Create the sample user:
+<details>
+<summary><h3>Register, Login, and Create a Resource</h3></summary>
 
 ```bash
 curl -s -X POST http://localhost:8080/api/register \
@@ -716,127 +516,13 @@ curl -s -X POST http://localhost:8080/api/register \
   -d '{"name":"Andrew","email":"andrew@test.com","password":"hash3"}'
 ```
 
-Response:
-
-```json
-{"status":"created"}
-```
-
-Login as the sample user and copy the returned token:
-
 ```bash
-curl -s -X POST http://localhost:8080/api/login \
+LOGIN_RESPONSE="$(curl -s -X POST http://localhost:8080/api/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"andrew@test.com","password":"hash3"}'
+  -d '{"email":"andrew@test.com","password":"hash3"}')"
+
+TOKEN="$(printf '%s' "$LOGIN_RESPONSE" | jq -r '.token')"
 ```
-
-The response contains a token:
-
-```json
-{"token":"...","user_id":1}
-```
-
-The token is a JWT and should be sent as `Authorization: Bearer <token>` for authenticated endpoints.
-
-Save the token in your local terminal:
-
-```bash
-TOKEN="paste_the_login_token_here"
-```
-
-Create the two sample resources:
-
-```bash
-curl -s -X POST http://localhost:8080/api/resources \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"title":"First resource","content":"hello world","is_file":false}'
-```
-
-Response:
-
-```json
-{"status":"created"}
-```
-
-```bash
-curl -s -X POST http://localhost:8080/api/resources \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"title":"Second resource","content":"hello People","is_file":false}'
-```
-
-Response:
-
-```json
-{"status":"created"}
-```
-
-Log out the account:
-```bash
-curl -s -X POST http://localhost:8080/api/logout \
-  -H "Authorization: Bearer $TOKEN"
-```
-
-Response:
-
-```json
-{"status":"logout success"}
-```
-
-This endpoint is stateless: the client should delete its local token after this response. The JWT remains cryptographically valid until its configured expiration time.
-
-
-## For Specific Function Test, Send Requests From Your Local Terminal
-### Login
-
-```bash
-curl -s -X POST http://localhost:8080/api/login \
-  -H "Content-Type: application/json" \
-  -d '{"email":"andrew@test.com","password":"hash3"}'
-```
-
-The response contains a token:
-
-```json
-{"token":"...","user_id":1}
-```
-
-The token is a JWT and should be sent as `Authorization: Bearer <token>` for authenticated endpoints.
-
-Save it in your shell:
-
-```bash
-TOKEN="<paste-token-here>"
-```
-
-### List Resources
-
-```bash
-curl -s http://localhost:8080/api/resources \
-  -H "Authorization: Bearer $TOKEN"
-```
-
-Response:
-
-```json
-{"data":[{"id":1,"title":"First resource","content":"hello world","is_file":false},{"id":2,"title":"Second resource","content":"hello People","is_file":false}]}
-```
-
-### Get One Resource
-
-```bash
-curl -s "http://localhost:8080/api/resources?id=1" \
-  -H "Authorization: Bearer $TOKEN"
-```
-
-Response:
-
-```json
-{"id":1,"title":"First resource","content":"hello world","is_file":false}
-```
-
-### Create A Text Resource
 
 ```bash
 curl -s -X POST http://localhost:8080/api/resources \
@@ -845,104 +531,38 @@ curl -s -X POST http://localhost:8080/api/resources \
   -d '{"title":"Note","content":"hello from curl","is_file":false}'
 ```
 
-Response:
-
-```json
-{"status":"created"}
-```
-
-### Update A Resource
-
 ```bash
-curl -s -X PUT http://localhost:8080/api/resources \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"id":1001,"title":"Updated note","content":"updated text"}'
-```
-
-Response:
-
-```json
-{"status":"updated"}
-```
-
-### Delete A Resource
-
-```bash
-curl -s -X DELETE "http://localhost:8080/api/resources?id=1001" \
+curl -s http://localhost:8080/api/resources \
   -H "Authorization: Bearer $TOKEN"
 ```
 
-Response:
+</details>
 
-```json
-{"status":"deleted"}
-```
+<details>
+<summary><h3>Upload and Download a File Resource</h3></summary>
 
-### Upload A file: Two Step Approach
-### First Step: Get A File Upload URL
+Request an upload URL:
 
 ```bash
-curl -s -X POST http://localhost:8080/api/files/upload-url \
+UPLOAD_RESPONSE="$(curl -s -X POST http://localhost:8080/api/files/upload-url \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"filename":"hello.txt","content_type":"text/plain"}'
+  -d '{"filename":"hello.txt","content_type":"text/plain"}')"
+
+UPLOAD_URL="$(printf '%s' "$UPLOAD_RESPONSE" | jq -r '.upload_url')"
+PUBLIC_URL="$(printf '%s' "$UPLOAD_RESPONSE" | jq -r '.public_url')"
 ```
 
-Response:
-
-```json
-{
-  "upload_url": "http://localhost:9000/webserver-files/users/1/uploads/...",
-  "public_url": "http://localhost:9000/webserver-files/users/1/uploads/...",
-  "object_key": "users/1/uploads/...",
-  "bucket": "webserver-files",
-  "content_type": "text/plain",
-  "expires_in": 300
-}
-```
-
-The response contains:
-
-- `upload_url`: temporary MinIO URL for uploading bytes.
-- `public_url`: stable URL stored later in the resource content.
-- `object_key`: MinIO object key.
-- `expires_in`: upload URL lifetime in seconds.
-
-
-Save the necessary URL in your shell.
-
-Copy the `upload_url` from the previous response:
+Upload bytes directly to MinIO/S3:
 
 ```bash
-UPLOAD_URL="<paste-upload-url-here>"
-```
-
-Copy the `public_url` from the upload URL response:
-
-```bash
-PUBLIC_URL="<paste-public-url-here>"
-```
-
-
-### Upload File Bytes To MinIO
-
-```bash
-echo "hello file" > hello.txt #write content into file hello.txt
-
+printf 'hello file\n' > hello.txt
 curl -X PUT "$UPLOAD_URL" \
   -H "Content-Type: text/plain" \
   --data-binary @hello.txt
 ```
 
-Response:
-
-```text
-No response body. A successful upload returns HTTP 200 OK.
-```
-
-### Second Step: Create the File Resource URL in the DB
-### Create A File Resource
+Create file metadata in PostgreSQL:
 
 ```bash
 curl -s -X POST http://localhost:8080/api/resources \
@@ -951,84 +571,19 @@ curl -s -X POST http://localhost:8080/api/resources \
   -d "{\"title\":\"Uploaded file\",\"content\":\"$PUBLIC_URL\",\"is_file\":true}"
 ```
 
-Response:
+Request a download URL:
 
-```json
-{"status":"created"}
-```
-
-### Get A File Download URL
 ```bash
-curl -s "http://localhost:8080/api/files/download-url?resource_id=1002" \
+curl -s "http://localhost:8080/api/files/download-url?resource_id=<resource-id>" \
   -H "Authorization: Bearer $TOKEN"
 ```
 
-Response:
-
-```json
-{
-  "download_url": "http://localhost:9000/webserver-files/users/1/uploads/...",
-  "public_url": "http://localhost:9000/webserver-files/users/1/uploads/...",
-  "object_key": "users/1/uploads/...",
-  "bucket": "webserver-files",
-  "expires_in": 300
-}
-```
-
-The response contains `download_url`.
-
-### Download The File From MinIO
-
-```bash
-DOWNLOAD_URL="<paste-download-url-here>"
-curl -L "$DOWNLOAD_URL" -o downloaded-hello.txt
-# then the file is downloaded in local directory
-```
-
-Response:
-
-```text
-curl writes the downloaded bytes to downloaded-hello.txt.
-```
-
-### Logout
-
-```bash
-curl -s -X POST http://localhost:8080/api/logout \
-  -H "Authorization: Bearer $TOKEN"
-```
-
-Response:
-
-```json
-{"status":"logout success"}
-```
-
-## Run Tests
-Run the C++ unit tests inside a web container:
-
-```bash
-docker exec sys-web-1 bash -lc "cd /workspace && cmake --build build --target unit_tests && ./build/bin/unit_tests"
-```
-
-Run the Python API tests from your local terminal:
-
-```bash
-python3 -m pytest tests/api_tests.py
-```
-
-Response:
-
-```text
-All tests should pass.
-```
-
-The API tests expect the Docker services, both webserver processes, PostgreSQL tables, JWT environment variables, and MinIO bucket to be available. The Compose init jobs create the tables and bucket automatically.
+</details>
 
 ## Notes
 
-- The backend usually does not download file bytes itself. It returns presigned URLs so the client uploads/downloads directly with MinIO.
-- The `content` column currently stores either plain text or a file public URL. A future improvement would be storing `object_key` in a separate database column.
-- If you change C++ source files, rebuild the server executable and restart both webserver processes.
-- If you change `Dockerfile`, rebuild the Docker images.
-- If you change Docker Compose environment variables, recreate the containers.
+- The backend is API-only; unsupported routes return a normal JSON/HTTP not-found response.
+- `resources.content` stores text for text resources and the public object URL for file resources.
+- A future schema improvement would store object keys separately from display/public URLs.
+- Local MinIO CORS allows browser access from `localhost:3000` and `127.0.0.1:3000`.
+- Production bucket CORS must allow the deployed frontend origin, `PUT`, `GET`, `HEAD`, `Content-Type`, and exposed `ETag`.
