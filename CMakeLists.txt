@@ -4,7 +4,7 @@ cmake_minimum_required(VERSION 3.16)
 project(webserver LANGUAGES CXX)
 
 # Match the language features used in the codebase.
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
@@ -30,7 +30,7 @@ set(WEBSERVER_SOURCES
 
 add_executable(${PROJECT_NAME} ${WEBSERVER_SOURCES})
 
-# Allow includes like "thread/locker.h" by treating src/ as an include root.
+# Allow includes like "thread/threadpool.h" by treating src/ as an include root.
 target_include_directories(${PROJECT_NAME}
     PRIVATE
         ${PROJECT_SOURCE_DIR}/src

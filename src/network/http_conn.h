@@ -21,7 +21,6 @@
 #include <string>
 #include <nlohmann/json.hpp>
 #include <set>
-#include "thread/locker.h"
 
 using json = nlohmann::ordered_json;
 
