@@ -1,4 +1,4 @@
-# Webserver
+# Scalable Resource Management 
 
 Scalable C++ resource-management web application featuring event driven built with `epoll`, JWT authentication,
 PostgreSQL persistence, Redis/Valkey caching, S3-compatible file storage, a Next.js frontend, Docker Compose local orchestration, and AWS ECS deployment.

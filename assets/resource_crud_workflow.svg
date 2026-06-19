@@ -1,4 +1,5 @@
 <svg width="100%" viewBox="0 0 680 320" role="img" xmlns="http://www.w3.org/2000/svg" style="">
+<rect id="readme-bg" width="100%" height="100%" fill="#ffffff"/>
 <title style="fill:rgb(0, 0, 0);stroke:none;color:rgb(0, 0, 0);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto">Resource CRUD workflow</title>
 <desc style="fill:rgb(0, 0, 0);stroke:none;color:rgb(0, 0, 0);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto">Left to right flowchart showing the request path from client through Nginx, a C++ backend container, JWT validation, ResourceService, optional Redis cache lookup, ResourceDAO, PostgreSQL, and JSON response. A second row shows that creates, updates, and deletes invalidate the affected resource keys and the owning user's resource-list key.</desc>
 <defs>
