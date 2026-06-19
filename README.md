@@ -1,12 +1,11 @@
 # Webserver
 
-Scalable C++ resource-management web application with JWT authentication,
-PostgreSQL persistence, Redis/Valkey caching, S3-compatible file storage, a
-Next.js frontend, Docker Compose local orchestration, and AWS ECS deployment.
+Scalable C++ resource-management web application featuring event driven built with `epoll`, JWT authentication,
+PostgreSQL persistence, Redis/Valkey caching, S3-compatible file storage, a Next.js frontend, Docker Compose local orchestration, and AWS ECS deployment.
 
-Frontend deployment origin: [Resource_Management-live-demo](https://webserver-frontend-zeta.vercel.app)
+Cloud Deployed Live Demo: [Resource_Management-Live-Demo](https://webserver-frontend-zeta.vercel.app)
 
-## Features
+## ✨ Features
 
 - **C++ HTTP Backend** - Event-driven Linux server built with `epoll`, non-blocking sockets, and a worker thread pool
 - **JWT Authentication** - User registration, login, logout, signed bearer tokens, issuer checks, and expiry validation
@@ -18,19 +17,23 @@ Frontend deployment origin: [Resource_Management-live-demo](https://webserver-fr
 - **Thread-Safe Shared Infrastructure** - Synchronized worker queue, PostgreSQL pool, Redis pool, and async logger built with mutexes, semaphores, condition variables, and atomics
 - **Next.js Web Interface** - Login, registration, resource list/detail/create, and file upload pages
 - **Local Full Stack** - Docker Compose runs two backend containers, Nginx load balancing, frontend, PostgreSQL, Redis, MinIO, and init jobs
+- **Cloud Full Stack** - Vercel hosts the frontend, while AWS ALB, ECS Fargate, RDS, ElastiCache/Valkey, S3-compatible storage, and CloudWatch Logs run the backend stack
 - **CI/CD Automation** - GitHub Actions builds ARM64 backend images, runs C++ unit tests, pushes release images to ECR, runs migrations, and updates ECS Fargate
 
-## Tech Stack
+## 🧰 Tech Stack
 
 - **Backend**: C++20, Linux `epoll`, POSIX sockets, custom thread pool, custom connection pool, async logger
 - **API/Data**: nlohmann-json, libpq/PostgreSQL, Redis or Valkey through hiredis
 - **Auth**: OpenSSL SHA-256 password hashing, jwt-cpp signed JWTs
-- **Storage**: MinIO locally, S3-compatible object storage in production
+- **Storage**:
+  - Persistence with PostgreSQL locally and Amazon RDS PostgreSQL in production
+  - Temporary/cache data with Redis locally and Amazon ElastiCache/Valkey in production
+  - Object storage with MinIO locally and S3-compatible storage in production
 - **Frontend**: Next.js 16, React 19, TypeScript, TanStack Query, Tailwind CSS
 - **Build/Test**: CMake, Ninja, vcpkg, GoogleTest, pytest, Vitest
 - **Runtime/Deploy**: Docker, Docker Compose, Nginx, AWS ECS Fargate, ECR, RDS, ElastiCache/Valkey, Secrets Manager, Vercel, Cloudwatch log
 
-## Project Structure
+## 🗂️ Project Structure
 
 <details>
 <summary><h3>Folder Tree</h3></summary>
@@ -44,7 +47,7 @@ Frontend deployment origin: [Resource_Management-live-demo](https://webserver-fr
 │   ├── service/                 # User, resource, and storage business logic
 │   ├── dao/                     # PostgreSQL data access objects
 │   ├── db/                      # PostgreSQL connection pool
-│   ├── cache/                   # Redis client and resource cache helpers
+│   ├── cache/                   # Redis client connection pool and resource cache helpers
 │   └── utils/                   # JWT, auth, env, and logging utilities
 │
 ├── frontend/                    # Next.js frontend application
@@ -59,12 +62,11 @@ Frontend deployment origin: [Resource_Management-live-demo](https://webserver-fr
 │   ├── schema.sql               # Local Compose bootstrap schema
 │   └── migrations/              # Production migration files and migration README
 │
-├── assets/                      # README architecture diagrams
+├── assets/                      # README architecture and workflow diagrams
 ├── tests/                       # Backend unit and API tests
 │   ├── unit_tests.cpp           # GoogleTest tests
 │   └── api_tests.py             # pytest API/integration tests
 │
-├── scripts/                     # Migration and AWS resource helper scripts
 ├── deploy/                      # AWS and MinIO/S3 deployment templates
 ├── vcpkg-triplets/              # Release triplets for Linux ARM64 and x64
 ├── .github/workflows/           # CI and backend deployment workflows
@@ -82,10 +84,11 @@ Git.
 
 </details>
 
-## Functional Architecture
+## 🏗️ Functional Architecture
 
 ![Functional Architecture](assets/Function_Architecture.svg)
 
+### 🐳 Local Deloyment (on Docker) Architecture
 ```text
 Browser
   -> Next.js frontend :3000
@@ -98,7 +101,28 @@ Browser
                   -> MinIO or S3-compatible object storage
 ```
 
-Inside each backend process:
+### ☁️ Cloud Deployment Architecture
+```text
+Browser
+  -> Vercel-hosted Next.js frontend
+      -> /api/* rewrite
+          -> AWS public backend origin
+              -> Application Load Balancer
+                  -> ECS Fargate service
+                      -> C++ backend task(s) :8080
+                          -> Amazon RDS PostgreSQL :5432
+                          -> Amazon ElastiCache/Valkey :6379
+                          -> S3-compatible object storage
+                          -> Amazon CloudWatch Logs log group
+
+GitHub Actions
+  -> builds and tests backend image
+  -> pushes release image to Amazon ECR
+  -> runs database migrations
+  -> updates the ECS Fargate service
+```
+
+### ⚙️ Inside each backend process:
 
 ```text
 main.cpp
@@ -114,7 +138,7 @@ http_conn
   -> serializes JSON responses
 
 Service layer
-  -> applies auth, resource, storage, and file cleanup rules
+  -> applies auth, resource, storage, and file cleanup logics
 
 DAO/cache/storage adapters
   -> PostgreSQL connection pool
@@ -126,26 +150,45 @@ Async logger
   -> dedicated logger thread flushes entries to stderr
 ```
 
-## API
+## 🔌 API
+
+### 🩺 Health Check
 
 | Feature | Method | Path | Auth | Description |
 |---------|--------|------|------|-------------|
 | Health check | GET | `/health` | No | Load balancer/container health response |
+
+### 👤 User Requests
+
+| Feature | Method | Path | Auth | Description |
+|---------|--------|------|------|-------------|
 | Register | POST | `/api/register` | No | Create a user |
 | Login | POST | `/api/login` | No | Return JWT token and user ID |
 | Logout | POST | `/api/logout` | Yes | Validate token and return client-side logout success |
+
+### 📦 Resource Requests
+
+| Feature | Method | Path | Auth | Description |
+|---------|--------|------|------|-------------|
 | List resources | GET | `/api/resources` | Yes | List resources owned by the current user |
 | Get resource | GET | `/api/resources?id=:id` | Yes | Read one resource owned by the current user |
 | Create resource | POST | `/api/resources` | Yes | Create text or file resource metadata |
 | Update resource | PUT | `/api/resources` | Yes | Update owned resource title/content |
 | Delete resource | DELETE | `/api/resources?id=:id` | Yes | Delete owned resource and object-storage file when needed |
+
+### 📁 File Requests
+
+| Feature | Method | Path | Auth | Description |
+|---------|--------|------|------|-------------|
 | Upload URL | POST | `/api/files/upload-url` | Yes | Create presigned object-storage PUT URL |
 | Download URL | GET | `/api/files/download-url?resource_id=:id` | Yes | Create presigned object-storage GET URL for a file resource |
 
-## Core Workflows
+## 🔄 Core Workflows
 
 <details>
 <summary><h3>Authentication Workflow</h3></summary>
+
+![Authentication Workflow](assets/authentication_workflow.svg)
 
 ```text
 1. Client registers through POST /api/register
@@ -166,21 +209,30 @@ their configured expiration time.
 
 Shared backend infrastructure is designed for concurrent request processing:
 
+![Thread Pool Concurrency Flow](assets/thread_pool_concurrency_flow.svg)
 ```text
 Thread pool
   -> mutex-protected work queue
   -> counting semaphore wakes workers when tasks are available
   -> atomic stop flag coordinates shutdown
+```
 
+![PostgreSQL Pool Concurrency Flow](assets/postgres_pool_concurrency_flow.svg)
+```text
 PostgreSQL connection pool
   -> mutex-protected PGconn queue
   -> counting semaphore bounds concurrent leases
-
+```
+![Redis Pool Concurrency Flow](assets/redis_pool_concurrency_flow.svg)
+```text
 Redis/Valkey connection pool
   -> mutex-protected hiredis context queue
   -> condition variable waits for available connections
   -> failed connections are discarded and replaced when possible
+```
 
+![Async Logger Concurrency Flow](assets/async_logger_concurrency_flow.svg)
+```text
 Async logger
   -> mutex-protected log queue
   -> condition variable wakes the logging thread
@@ -191,6 +243,8 @@ Async logger
 
 <details>
 <summary><h3>Resource CRUD Workflow</h3></summary>
+
+![Resource CRUD Workflow](assets/resource_crud_workflow.svg)
 
 ```text
 Client request
@@ -216,19 +270,26 @@ and the owning user's resource-list key.
 The backend does not normally stream uploaded or downloaded file bytes.
 Instead, it signs short-lived storage URLs.
 
+![File Upload Workflow](assets/file_upload_workflow.svg)
 ```text
 Upload:
 1. Client asks POST /api/files/upload-url for a signed PUT URL
 2. Backend validates filename/content type and signs an object key
 3. Client uploads bytes directly to MinIO/S3 with PUT
 4. Client creates a resource row with content=<public_url> and is_file=true
+```
 
+![File Download Workflow](assets/file_download_workflow.svg)
+```text
 Download:
 1. Client asks GET /api/files/download-url?resource_id=:id
 2. Backend verifies ownership and requires is_file=true
 3. Backend signs a short-lived GET URL
 4. Client downloads bytes directly from MinIO/S3
+```
 
+![File Delete Workflow](assets/file_delete_workflow.svg)
+```text
 Delete:
 1. Client deletes the file resource through DELETE /api/resources?id=:id
 2. Backend deletes the object-storage file
@@ -265,23 +326,35 @@ backend origin.
 
 </details>
 
-## Project Launch
+## 🚀 Project Launch
+
+<details>
+<summary><h3>Cloud Deployed Live Demo</h3></summary>
+
+Cloud Deployed Live Demo: [Resource_Management_Live_Demo](https://webserver-frontend-zeta.vercel.app)
+
+</details>
+
 
 <details>
 <summary><h3>Quick Start Locally</h3></summary>
 
-### Requirements
+### 📋 Requirements
 
 - Docker or Docker Desktop
 - CMake/Ninja only if building outside Docker
-- Node.js `>=24.9.0` and npm `>=11.6.0` only if running the frontend outside Docker
+- Node.js `>=24.9.0` and npm `>=11.6.0` only if running the frontend manually outside Docker
 
-### Start The Full Docker Stack
+### 🐳 Start The Full Docker Stack
 
 ```bash
 docker compose build
 docker compose up -d
 ```
+
+Docker Compose builds and runs the Next.js frontend in its own container. Reviewers
+do not need to create `frontend/.env.local` or install frontend dependencies on
+the host machine for the Docker workflow.
 
 This starts:
 
@@ -327,16 +400,23 @@ docker compose down -v
 <details>
 <summary><h3>Common Commands</h3></summary>
 
-### Backend Docker
+### 🐳 Backend Docker
 
 ```bash
+# Validate and print the fully resolved Docker Compose configuration.
 docker compose config
+
+# Show the current status of every service in the stack.
 docker compose ps
-docker compose logs -f nginx web1 web2
+
+# Stream logs from the frontend, load balancer, and backend containers.
+docker compose logs -f frontend nginx web1 web2
+
+# Re-run the one-shot database schema and MinIO bucket initializer jobs.
 docker compose up db-init minio-init --no-recreate --abort-on-container-exit
 ```
 
-### Backend Tests
+### ✅ Backend Tests
 
 Run C++ unit tests inside a backend container:
 
@@ -356,7 +436,7 @@ Use another backend URL with:
 BASE_URL=http://localhost:8081 python3 -m pytest tests/api_tests.py
 ```
 
-### Frontend
+### 🖥️ Frontend Launch Outside Docker
 
 ```bash
 cd frontend
@@ -378,7 +458,9 @@ API_BASE_URL=http://localhost:8080
 <details>
 <summary><h3>Local Runtime Configuration</h3></summary>
 
-Docker Compose sets the backend environment for local development:
+Docker Compose injects these backend environment variables automatically for
+local development. Reviewers do not need to create a backend `.env` file when
+using `docker compose up`.
 
 ```text
 POSTGRES_HOST=postgres
@@ -400,7 +482,7 @@ S3_UPLOAD_URL_EXPIRES=300
 S3_DOWNLOAD_URL_EXPIRES=300
 S3_MAX_FILENAME_LENGTH=255
 
-JWT_SECRET=change-me-to-a-long-random-secret-before-production
+JWT_SECRET=<change-me-to-a-long-random-secret-before-production>
 JWT_ISSUER=webserver
 JWT_EXPIRES_SECONDS=3600
 ```
@@ -409,72 +491,6 @@ Use a strong random `JWT_SECRET` outside local development.
 
 The local database schema is applied from `db/schema.sql`. Production-style
 migrations live in `db/migrations` and are applied by `scripts/run_migrations.sh`.
-
-</details>
-
-<details>
-<summary><h3>AWS Backend Deployment</h3></summary>
-
-The backend deployment workflow is:
-
-```text
-.github/workflows/deploy-backend.yml
-```
-
-Environment configuration expected by the GitHub `production` environment:
-
-```text
-Secret:
-AWS_ROLE_TO_ASSUME=arn:aws:iam::<account-id>:role/<github-actions-deploy-role>
-
-Variables:
-ECS_CLUSTER=webserver-cluster
-ECS_SERVICE=webserver-service
-```
-
-The ECS task definition is:
-
-```text
-ecs-task-definition.json
-```
-
-Backend production variables are listed in:
-
-```text
-.env.production.example
-```
-
-Sensitive values such as `POSTGRES_PASSWORD`, `JWT_SECRET`, `S3_ACCESS_KEY`,
-`S3_SECRET_KEY`, and `REDIS_PASSWORD` should come from AWS Secrets Manager or
-SSM Parameter Store rather than plain task environment variables.
-
-AWS helper scripts:
-
-```bash
-scripts/aws_backend_status.sh
-scripts/aws_backend_start.sh
-scripts/aws_backend_stop.sh
-```
-
-Default AWS helper values:
-
-```text
-AWS_REGION=ap-southeast-2
-RDS_INSTANCE_ID=webserver-postgres
-ECS_CLUSTER=webserver-cluster
-ECS_SERVICE=webserver-service
-ECS_DESIRED_COUNT=1
-WAIT=true
-REDIS_REPLICATION_GROUP_ID=webserver-valkey
-```
-
-Example:
-
-```bash
-scripts/aws_backend_status.sh
-ECS_DESIRED_COUNT=1 scripts/aws_backend_start.sh
-WAIT=false scripts/aws_backend_stop.sh
-```
 
 </details>
 
@@ -508,7 +524,7 @@ deploy/aws/s3-cors.production.json
 
 </details>
 
-## Example API Usage
+## 🧪 Example API Usage
 
 <details>
 <summary><h3>Register, Login, and Create a Resource</h3></summary>
@@ -583,7 +599,7 @@ curl -s "http://localhost:8080/api/files/download-url?resource_id=<resource-id>"
 
 </details>
 
-## Notes
+## 📝 Notes
 
 - The backend is API-only; unsupported routes return a normal JSON/HTTP not-found response.
 - `resources.content` stores text for text resources and the public object URL for file resources.

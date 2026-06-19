@@ -4,7 +4,20 @@ This is the Next.js frontend for the C++ resource server.
 
 ## Getting Started
 
-First, set the backend URL used by the Next.js API rewrite:
+From the repository root, the recommended local workflow is Docker Compose:
+
+```bash
+docker compose build
+docker compose up -d
+```
+
+That starts this frontend in a container at
+[http://localhost:3000](http://localhost:3000). The container uses
+`API_BASE_URL=http://nginx`, so reviewers do not need to create
+`frontend/.env.local` or install frontend dependencies on the host machine.
+
+For manual frontend development outside Docker, first set the backend URL used
+by the Next.js API rewrite:
 
 ```bash
 cp .env.example .env.local
@@ -13,9 +26,10 @@ cp .env.example .env.local
 For local development, `API_BASE_URL=http://localhost:8080` points the frontend
 proxy at the local C++ backend or Nginx entrypoint.
 
-Then run the development server:
+Then install dependencies and run the development server:
 
 ```bash
+npm install
 npm run dev
 ```
 
