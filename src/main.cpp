@@ -135,7 +135,7 @@ int main(int argc, char* argv[]){
     addfd(epollfd, listenfd, 0);
     http_conn::m_epollfd = epollfd;
 
-    // Proactor-style event loop: main thread handles socket IO, workers process requests.
+    // Proactor-style event loop: main thread handles socket IO, workers threads process requests.
     while(1) {
         int num = epoll_wait(epollfd, events, MAX_EVENT_NUMBER, -1);
         if ((num < 0) && (errno != EINTR)){

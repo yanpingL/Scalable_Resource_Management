@@ -64,7 +64,7 @@ void Logger::worker_loop() {
         }
 
         for (const std::string& log_msg : pending) {
-            std::cerr << log_msg << std::endl;
+            std::cerr << log_msg << '\n';
         }
     }
 }

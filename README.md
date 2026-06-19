@@ -4,7 +4,7 @@ Scalable C++ resource-management web application with JWT authentication,
 PostgreSQL persistence, Redis/Valkey caching, S3-compatible file storage, a
 Next.js frontend, Docker Compose local orchestration, and AWS ECS deployment.
 
-Frontend deployment origin: [Resource_Management-frontend](https://webserver-frontend-zeta.vercel.app)
+Frontend deployment origin: [Resource_Management-live-demo](https://webserver-frontend-zeta.vercel.app)
 
 ## Features
 
@@ -22,7 +22,7 @@ Frontend deployment origin: [Resource_Management-frontend](https://webserver-fro
 
 ## Tech Stack
 
-- **Backend**: C++20, Linux `epoll`, POSIX sockets, custom thread pool, async logger
+- **Backend**: C++20, Linux `epoll`, POSIX sockets, custom thread pool, custom connection pool, async logger
 - **API/Data**: nlohmann-json, libpq/PostgreSQL, Redis or Valkey through hiredis
 - **Auth**: OpenSSL SHA-256 password hashing, jwt-cpp signed JWTs
 - **Storage**: MinIO locally, S3-compatible object storage in production
@@ -59,6 +59,7 @@ Frontend deployment origin: [Resource_Management-frontend](https://webserver-fro
 │   ├── schema.sql               # Local Compose bootstrap schema
 │   └── migrations/              # Production migration files and migration README
 │
+├── assets/                      # README architecture diagrams
 ├── tests/                       # Backend unit and API tests
 │   ├── unit_tests.cpp           # GoogleTest tests
 │   └── api_tests.py             # pytest API/integration tests
@@ -82,6 +83,8 @@ Git.
 </details>
 
 ## Functional Architecture
+
+![Functional Architecture](assets/Function_Architecture.svg)
 
 ```text
 Browser
@@ -115,11 +118,11 @@ Service layer
 
 DAO/cache/storage adapters
   -> PostgreSQL connection pool
-  -> Redis/Valkey resource cache
+  -> Redis/Valkey resource cache and connection pool
   -> S3/MinIO presigned URL generation and object deletion
 
 Async logger
-  -> request threads enqueue timestamped log lines
+  -> request threads enqueue timestamped log list
   -> dedicated logger thread flushes entries to stderr
 ```
 
