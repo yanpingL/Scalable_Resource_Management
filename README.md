@@ -84,7 +84,7 @@ Git.
 
 </details>
 
-## 🏗️ Functional Architecture
+## 🏗️ System Architecture
 
 ![Functional Architecture](assets/Function_Architecture.svg)
 
