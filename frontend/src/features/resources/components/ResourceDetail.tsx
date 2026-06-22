@@ -11,7 +11,7 @@ import { getAuthToken } from "@/features/auth/authStore";
 import { requestDownloadUrl } from "@/features/files/api";
 import { FileDownloadButton } from "@/features/files/components/FileDownloadButton";
 import { deleteResource, getResource, updateTextResource } from "../api";
-import type { ResourceFormValues } from "../types";
+import type { Resource, ResourceFormValues } from "../types";
 import { ResourceForm } from "./ResourceForm";
 
 type ResourceDetailProps = {
@@ -104,8 +104,12 @@ export function ResourceDetail({ id }: ResourceDetailProps) {
 
   const deleteMutation = useMutation({
     mutationFn: deleteResource,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["resources"] });
+    onSuccess: (_data, deletedId) => {
+      queryClient.setQueryData<Resource[]>(["resources"], (resources) =>
+        resources?.filter((resource) => resource.id !== deletedId),
+      );
+      queryClient.removeQueries({ queryKey: ["resources", deletedId] });
+      void queryClient.invalidateQueries({ queryKey: ["resources"] });
       router.push("/resources");
     },
   });

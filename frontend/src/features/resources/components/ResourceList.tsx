@@ -36,9 +36,12 @@ export function ResourceList() {
 
   const deleteMutation = useMutation({
     mutationFn: deleteResource,
-    onSuccess: () => {
+    onSuccess: (_data, deletedId) => {
       setResourceToDelete(null);
-      queryClient.invalidateQueries({ queryKey: ["resources"] });
+      queryClient.setQueryData<Resource[]>(["resources"], (resources) =>
+        resources?.filter((resource) => resource.id !== deletedId),
+      );
+      void queryClient.invalidateQueries({ queryKey: ["resources"] });
     },
   });
 

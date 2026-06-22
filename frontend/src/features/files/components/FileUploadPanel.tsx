@@ -49,7 +49,8 @@ export function FileUploadPanel({ onUploaded }: FileUploadPanelProps) {
     onSuccess: () => {
       setTitle("");
       setFile(null);
-      queryClient.invalidateQueries({ queryKey: ["resources"] });
+      queryClient.removeQueries({ queryKey: ["resources"] });
+      void queryClient.invalidateQueries({ queryKey: ["resources"] });
       onUploaded?.();
     },
   });

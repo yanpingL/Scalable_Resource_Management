@@ -23,7 +23,8 @@ export function CreateResourcePage() {
   const createMutation = useMutation({
     mutationFn: createTextResource,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["resources"] });
+      queryClient.removeQueries({ queryKey: ["resources"] });
+      void queryClient.invalidateQueries({ queryKey: ["resources"] });
       router.push("/resources");
     },
   });
