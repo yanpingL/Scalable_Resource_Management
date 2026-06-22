@@ -73,6 +73,7 @@ include(GoogleTest)
 add_executable(unit_tests
     tests/unit_tests.cpp
     src/utils/jwt_utils.cpp
+    src/utils/logger.cpp
 )
 
 target_include_directories(unit_tests
@@ -83,6 +84,7 @@ target_include_directories(unit_tests
 target_link_libraries(unit_tests
     PRIVATE
         OpenSSL::Crypto
+        Threads::Threads
         nlohmann_json::nlohmann_json
         jwt-cpp::jwt-cpp
         GTest::gtest_main
