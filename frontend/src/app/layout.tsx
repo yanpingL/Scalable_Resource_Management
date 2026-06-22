@@ -18,6 +18,7 @@ export const metadata: Metadata = {
   description: "Frontend for the C++ auth resource server",
 };
 
+// Defines the root HTML shell and global providers for every route.
 export default function RootLayout({
   children,
 }: Readonly<{

@@ -24,6 +24,7 @@
 #define DEFAULT_MAX_FD 4096  // default maximum #file descriptors/connections
 #define MAX_EVENT_NUMBER 10000  // maximum #events to be listned
 
+// Treats common truthy environment values as enabled flags.
 bool env_enabled(const char* name) {
     std::string value = EnvUtils::get_env_or_default(name, "false");
     return value == "1" || value == "true" || value == "TRUE" || value == "yes" || value == "YES";

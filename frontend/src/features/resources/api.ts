@@ -11,12 +11,14 @@ type ResourceStatusResponse = {
   status: "created" | "updated" | "deleted";
 };
 
+// Builds Authorization headers from the current browser auth session.
 function authHeaders(): HeadersInit {
   const token = getAuthToken();
 
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+// Loads all resources owned by the authenticated user.
 export async function listResources() {
   const response = await apiFetch<ResourceListResponse>("/api/resources", {
     headers: authHeaders(),
@@ -25,12 +27,14 @@ export async function listResources() {
   return response.data;
 }
 
+// Loads one resource by id for the authenticated user.
 export function getResource(id: number) {
   return apiFetch<Resource>(`/api/resources?id=${id}`, {
     headers: authHeaders(),
   });
 }
 
+// Creates a text resource through the backend API.
 export function createTextResource(values: ResourceFormValues) {
   return apiFetch<ResourceStatusResponse>("/api/resources", {
     method: "POST",
@@ -43,6 +47,7 @@ export function createTextResource(values: ResourceFormValues) {
   });
 }
 
+// Creates file metadata after object storage upload succeeds.
 export function createFileResource(values: ResourceFormValues) {
   return apiFetch<ResourceStatusResponse>("/api/resources", {
     method: "POST",
@@ -55,6 +60,7 @@ export function createFileResource(values: ResourceFormValues) {
   });
 }
 
+// Updates the title/content fields for an existing resource.
 export function updateTextResource(
   id: number,
   values: ResourceFormValues,
@@ -70,6 +76,7 @@ export function updateTextResource(
   });
 }
 
+// Deletes one resource owned by the authenticated user.
 export function deleteResource(id: number) {
   return apiFetch<ResourceStatusResponse>(`/api/resources?id=${id}`, {
     method: "DELETE",

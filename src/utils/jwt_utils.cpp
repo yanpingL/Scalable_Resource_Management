@@ -10,14 +10,17 @@
 #include <exception>
 #include <string>
 
+// Reads the JWT HMAC secret from the environment.
 std::string JwtUtils::get_secret() {
     return EnvUtils::get_env_or_default("JWT_SECRET", "");
 }
 
+// Reads the expected JWT issuer from the environment.
 std::string JwtUtils::get_issuer() {
     return EnvUtils::get_env_or_default("JWT_ISSUER", "webserver");
 }
 
+// Reads the JWT lifetime from the environment.
 int JwtUtils::get_expires_seconds() {
     return EnvUtils::get_env_int_or_default("JWT_EXPIRES_SECONDS", 3600);
 }

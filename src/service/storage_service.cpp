@@ -152,6 +152,7 @@ bool is_blocked_extension(const std::string& filename) {
     return blocked.count(file_extension(filename)) > 0;
 }
 
+// Converts a MinIO HTTP method enum into its request method name.
 std::string method_name(minio::http::Method method) {
     if (method == minio::http::Method::kPut) {
         return "PUT";
@@ -159,10 +160,12 @@ std::string method_name(minio::http::Method method) {
     return "GET";
 }
 
+// Writes a storage-layer failure to the backend logger.
 void log_storage_error(const std::string& message) {
     Logger::get_instance()->log(ERROR, "storage error: " + message);
 }
 
+// Builds a JSON storage error response and logs the same reason.
 storage_json storage_error(const std::string& message) {
     log_storage_error(message);
     storage_json res;
@@ -170,6 +173,7 @@ storage_json storage_error(const std::string& message) {
     return res;
 }
 
+// Encodes binary bytes as lowercase hexadecimal text.
 std::string hex_encode(const unsigned char* data, std::size_t len) {
     std::ostringstream out;
     out << std::hex << std::setfill('0');
@@ -179,12 +183,14 @@ std::string hex_encode(const unsigned char* data, std::size_t len) {
     return out.str();
 }
 
+// Hashes a string with SHA-256 and returns lowercase hex.
 std::string sha256_hex(const std::string& value) {
     unsigned char hash[SHA256_DIGEST_LENGTH];
     SHA256(reinterpret_cast<const unsigned char*>(value.data()), value.size(), hash);
     return hex_encode(hash, SHA256_DIGEST_LENGTH);
 }
 
+// Computes an HMAC-SHA256 signature for AWS signing.
 std::string hmac_sha256(const std::string& key, const std::string& value) {
     unsigned int len = EVP_MAX_MD_SIZE;
     unsigned char hash[EVP_MAX_MD_SIZE];
@@ -198,6 +204,7 @@ std::string hmac_sha256(const std::string& key, const std::string& value) {
     return std::string(reinterpret_cast<char*>(hash), len);
 }
 
+// Percent-encodes a string using AWS SigV4 URI escaping rules.
 std::string aws_encode(const std::string& value, bool encode_slash) {
     std::ostringstream out;
     out << std::uppercase << std::hex << std::setfill('0');
@@ -213,6 +220,7 @@ std::string aws_encode(const std::string& value, bool encode_slash) {
     return out.str();
 }
 
+// Formats the current UTC time using the provided strftime pattern.
 std::string utc_timestamp(const char* format) {
     const std::time_t now = std::time(nullptr);
     std::tm tm{};
@@ -223,6 +231,7 @@ std::string utc_timestamp(const char* format) {
     return buffer;
 }
 
+// Creates an AWS S3 presigned URL without relying on the MinIO SDK path.
 storage_json create_aws_presigned_url(
     minio::http::Method method,
     const std::string& bucket,
@@ -349,64 +358,63 @@ storage_json StorageService::create_upload_url(
 
     storage_json res;
     try {
+        const std::string clean_filename = sanitize_filename(filename);
+        if (clean_filename.empty()) {
+            return storage_error("invalid filename");
+        }
 
-    const std::string clean_filename = sanitize_filename(filename);
-    if (clean_filename.empty()) {
-        return storage_error("invalid filename");
-    }
+        const int max_filename_length =
+            get_storage_env_int("S3_MAX_FILENAME_LENGTH", "MINIO_MAX_FILENAME_LENGTH", 255);
+        if (filename.size() > static_cast<std::size_t>(max_filename_length)) {
+            return storage_error("filename too long");
+        }
+        if (has_path_traversal(filename)) {
+            return storage_error("invalid filename");
+        }
+        if (is_blocked_extension(clean_filename)) {
+            return storage_error("blocked file type");
+        }
 
-    const int max_filename_length =
-        get_storage_env_int("S3_MAX_FILENAME_LENGTH", "MINIO_MAX_FILENAME_LENGTH", 255);
-    if (filename.size() > static_cast<std::size_t>(max_filename_length)) {
-        return storage_error("filename too long");
-    }
-    if (has_path_traversal(filename)) {
-        return storage_error("invalid filename");
-    }
-    if (is_blocked_extension(clean_filename)) {
-        return storage_error("blocked file type");
-    }
+        if (content_type.empty()) {
+            return storage_error("invalid content_type");
+        }
 
-    if (content_type.empty()) {
-        return storage_error("invalid content_type");
-    }
+        if (!is_allowed_content_type(content_type)) {
+            return storage_error("unsupported content_type");
+        }
 
-    if (!is_allowed_content_type(content_type)) {
-        return storage_error("unsupported content_type");
-    }
+        const std::string bucket = get_storage_env("S3_BUCKET", "MINIO_BUCKET", "webserver-files");
+        const std::string public_endpoint = trim_trailing_slash(
+            get_storage_env("S3_PUBLIC_ENDPOINT", "MINIO_PUBLIC_ENDPOINT", "http://localhost:9000"));
 
-    const std::string bucket = get_storage_env("S3_BUCKET", "MINIO_BUCKET", "webserver-files");
-    const std::string public_endpoint = trim_trailing_slash(
-        get_storage_env("S3_PUBLIC_ENDPOINT", "MINIO_PUBLIC_ENDPOINT", "http://localhost:9000"));
+        const std::string object_key =
+            "users/" + std::to_string(user_id) + "/uploads/" +
+            std::to_string(current_epoch_millis()) + "-" + clean_filename;
 
-    const std::string object_key =
-        "users/" + std::to_string(user_id) + "/uploads/" +
-        std::to_string(current_epoch_millis()) + "-" + clean_filename;
+        const std::string public_url =
+            public_endpoint + "/" + bucket + "/" + object_key;
 
-    const std::string public_url =
-        public_endpoint + "/" + bucket + "/" + object_key;
+        const int expires_seconds =
+            get_storage_env_int("S3_UPLOAD_URL_EXPIRES", "MINIO_UPLOAD_URL_EXPIRES", 300);
 
-    const int expires_seconds =
-        get_storage_env_int("S3_UPLOAD_URL_EXPIRES", "MINIO_UPLOAD_URL_EXPIRES", 300);
+        storage_json upload = create_presigned_url(
+            minio::http::Method::kPut,
+            public_endpoint,
+            bucket,
+            object_key,
+            expires_seconds);
+        if (upload.contains("error")) {
+            return upload;
+        }
 
-    storage_json upload = create_presigned_url(
-        minio::http::Method::kPut,
-        public_endpoint,
-        bucket,
-        object_key,
-        expires_seconds);
-    if (upload.contains("error")) {
-        return upload;
-    }
+        res["upload_url"] = upload["url"];
+        res["public_url"] = public_url;
+        res["object_key"] = object_key;
+        res["bucket"] = bucket;
+        res["content_type"] = content_type;
+        res["expires_in"] = expires_seconds;
 
-    res["upload_url"] = upload["url"];
-    res["public_url"] = public_url;
-    res["object_key"] = object_key;
-    res["bucket"] = bucket;
-    res["content_type"] = content_type;
-    res["expires_in"] = expires_seconds;
-
-    return res;
+        return res;
     } catch (const std::exception& error) {
         Logger::get_instance()->log(
             ERROR,
@@ -424,37 +432,36 @@ storage_json StorageService::create_upload_url(
 storage_json StorageService::create_download_url(const std::string& public_url) {
     storage_json res;
     try {
+        const std::string bucket = get_storage_env("S3_BUCKET", "MINIO_BUCKET", "webserver-files");
+        const std::string public_endpoint = trim_trailing_slash(
+            get_storage_env("S3_PUBLIC_ENDPOINT", "MINIO_PUBLIC_ENDPOINT", "http://localhost:9000"));
 
-    const std::string bucket = get_storage_env("S3_BUCKET", "MINIO_BUCKET", "webserver-files");
-    const std::string public_endpoint = trim_trailing_slash(
-        get_storage_env("S3_PUBLIC_ENDPOINT", "MINIO_PUBLIC_ENDPOINT", "http://localhost:9000"));
+        const std::string object_key =
+            extract_object_key_from_public_url(public_url, public_endpoint, bucket);
+        if (object_key.empty()) {
+            return storage_error("invalid file url");
+        }
 
-    const std::string object_key =
-        extract_object_key_from_public_url(public_url, public_endpoint, bucket);
-    if (object_key.empty()) {
-        return storage_error("invalid file url");
-    }
+        const int expires_seconds =
+            get_storage_env_int("S3_DOWNLOAD_URL_EXPIRES", "MINIO_DOWNLOAD_URL_EXPIRES", 300);
 
-    const int expires_seconds =
-        get_storage_env_int("S3_DOWNLOAD_URL_EXPIRES", "MINIO_DOWNLOAD_URL_EXPIRES", 300);
+        storage_json download = create_presigned_url(
+            minio::http::Method::kGet,
+            public_endpoint,
+            bucket,
+            object_key,
+            expires_seconds);
+        if (download.contains("error")) {
+            return download;
+        }
 
-    storage_json download = create_presigned_url(
-        minio::http::Method::kGet,
-        public_endpoint,
-        bucket,
-        object_key,
-        expires_seconds);
-    if (download.contains("error")) {
-        return download;
-    }
+        res["download_url"] = download["url"];
+        res["public_url"] = public_url;
+        res["object_key"] = object_key;
+        res["bucket"] = bucket;
+        res["expires_in"] = expires_seconds;
 
-    res["download_url"] = download["url"];
-    res["public_url"] = public_url;
-    res["object_key"] = object_key;
-    res["bucket"] = bucket;
-    res["expires_in"] = expires_seconds;
-
-    return res;
+        return res;
     } catch (const std::exception& error) {
         Logger::get_instance()->log(
             ERROR,
@@ -471,36 +478,36 @@ storage_json StorageService::create_download_url(const std::string& public_url) 
 // Deletes the MinIO object referenced by a public URL.
 bool StorageService::delete_file(const std::string& public_url, std::string& error) {
     try {
-    const std::string bucket = get_storage_env("S3_BUCKET", "MINIO_BUCKET", "webserver-files");
-    const std::string public_endpoint = trim_trailing_slash(
-        get_storage_env("S3_PUBLIC_ENDPOINT", "MINIO_PUBLIC_ENDPOINT", "http://localhost:9000"));
-    const std::string internal_endpoint = trim_trailing_slash(
-        get_storage_env("S3_ENDPOINT", "MINIO_ENDPOINT", public_endpoint));
+        const std::string bucket = get_storage_env("S3_BUCKET", "MINIO_BUCKET", "webserver-files");
+        const std::string public_endpoint = trim_trailing_slash(
+            get_storage_env("S3_PUBLIC_ENDPOINT", "MINIO_PUBLIC_ENDPOINT", "http://localhost:9000"));
+        const std::string internal_endpoint = trim_trailing_slash(
+            get_storage_env("S3_ENDPOINT", "MINIO_ENDPOINT", public_endpoint));
 
-    const std::string object_key =
-        extract_object_key_from_public_url(public_url, public_endpoint, bucket);
-    if (object_key.empty()) {
-        error = "invalid file url";
-        log_storage_error(error);
-        return false;
-    }
+        const std::string object_key =
+            extract_object_key_from_public_url(public_url, public_endpoint, bucket);
+        if (object_key.empty()) {
+            error = "invalid file url";
+            log_storage_error(error);
+            return false;
+        }
 
-    minio::s3::BaseUrl base_url = make_minio_base_url(internal_endpoint);
-    minio::creds::StaticProvider provider = make_minio_provider();
-    minio::s3::Client client(base_url, &provider);
+        minio::s3::BaseUrl base_url = make_minio_base_url(internal_endpoint);
+        minio::creds::StaticProvider provider = make_minio_provider();
+        minio::s3::Client client(base_url, &provider);
 
-    minio::s3::RemoveObjectArgs args;
-    args.bucket = bucket;
-    args.object = object_key;
+        minio::s3::RemoveObjectArgs args;
+        args.bucket = bucket;
+        args.object = object_key;
 
-    minio::s3::RemoveObjectResponse resp = client.RemoveObject(args);
-    if (!resp) {
-        error = resp.Error().String();
-        log_storage_error(error);
-        return false;
-    }
+        minio::s3::RemoveObjectResponse resp = client.RemoveObject(args);
+        if (!resp) {
+            error = resp.Error().String();
+            log_storage_error(error);
+            return false;
+        }
 
-    return true;
+        return true;
     } catch (const std::exception& ex) {
         error = std::string("storage delete error: ") + ex.what();
         Logger::get_instance()->log(ERROR, error);

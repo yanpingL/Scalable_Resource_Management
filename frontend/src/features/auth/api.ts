@@ -22,6 +22,7 @@ export type LoginResponse = {
   token: string;
 };
 
+// Sends a registration request to the backend auth API.
 export function registerUser(payload: RegisterRequest) {
   return apiFetch<RegisterResponse>("/api/register", {
     method: "POST",
@@ -29,6 +30,7 @@ export function registerUser(payload: RegisterRequest) {
   });
 }
 
+// Sends a login request and receives the authenticated user session.
 export function loginUser(payload: LoginRequest) {
   return apiFetch<LoginResponse>("/api/login", {
     method: "POST",

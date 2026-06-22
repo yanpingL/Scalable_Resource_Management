@@ -9,6 +9,7 @@
 
 class DaoUtil {
 public:
+    // Checks whether a PostgreSQL command result succeeded and records errors.
     static bool command_ok(
         PGconn* conn,
         PGresult* result,
@@ -29,6 +30,7 @@ public:
         return success;
     }
 
+    // Returns true when a PostgreSQL command affected at least one row.
     static bool affected_rows(PGresult* result) {
         if (result == nullptr) {
             return false;
@@ -38,11 +40,13 @@ public:
         return rows != nullptr && rows[0] != '\0' && std::atoi(rows) > 0;
     }
 
+    // Converts a PostgreSQL boolean field into a C++ bool.
     static bool pg_bool_value(PGresult* result, int row, int col) {
         const char* value = PQgetvalue(result, row, col);
         return value != nullptr && (value[0] == 't' || value[0] == '1');
     }
 
+    // Reads a nullable PostgreSQL field as an empty string when null.
     static std::string nullable_value(PGresult* result, int row, int col) {
         if (result == nullptr || PQgetisnull(result, row, col)) {
             return "";

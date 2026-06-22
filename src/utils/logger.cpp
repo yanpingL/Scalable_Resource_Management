@@ -3,6 +3,7 @@
 #include <ctime>
 #include <utility>
 
+// Starts the async logger worker thread.
 Logger::Logger()
     : running(true),
       worker(&Logger::worker_loop, this) {}
@@ -46,6 +47,7 @@ std::string level_to_string(LogLevel level) {
     }
 }
 
+// Moves queued log messages to stderr until shutdown is requested.
 void Logger::worker_loop() {
     while (true) {
         std::list<std::string> pending;

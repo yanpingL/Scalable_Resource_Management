@@ -10,6 +10,7 @@
 
 namespace {
 struct ConnectionReleaser {
+    // Returns a leased PostgreSQL connection to the pool when the guard exits.
     void operator()(PGconn* conn) const {
         if (conn != nullptr) {
             connection_pool::get_instance()->release_connection(conn);
@@ -20,16 +21,19 @@ struct ConnectionReleaser {
 using ConnectionPtr = std::unique_ptr<PGconn, ConnectionReleaser>;
 using ResultPtr = std::unique_ptr<PGresult, decltype(&PQclear)>;
 
+// Stores and logs a ResourceDAO error message.
 void set_resource_dao_error(const std::string& message) {
     ResourceDAO::msg = message;
     Logger::get_instance()->log(ERROR, message);
 }
 
+// Formats a ResourceDAO error from a caught standard exception.
 void set_resource_dao_exception(const char* action, const std::exception& error) {
     set_resource_dao_error(
         std::string("Resource database error while ") + action + ": " + error.what());
 }
 
+// Formats a ResourceDAO error from a non-standard exception.
 void set_resource_dao_unknown_exception(const char* action) {
     set_resource_dao_error(
         std::string("Resource database error while ") + action + ".");

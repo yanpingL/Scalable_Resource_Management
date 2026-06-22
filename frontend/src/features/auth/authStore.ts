@@ -2,6 +2,7 @@ const TOKEN_STORAGE_KEY = "resource_manager_token";
 const USER_ID_STORAGE_KEY = "resource_manager_user_id";
 const USER_NAME_STORAGE_KEY = "resource_manager_user_name";
 
+// Cleans stored user names and filters placeholder strings.
 function normalizeUserName(userName: string | null | undefined) {
   const trimmed = userName?.trim();
 
@@ -38,6 +39,7 @@ export function saveAuthSession(
   }
 }
 
+// Reads the saved JWT token from browser storage.
 export function getAuthToken() {
   if (typeof window === "undefined") {
     return null;
@@ -50,6 +52,7 @@ export function getAuthToken() {
   }
 }
 
+// Reads the saved user display name from browser storage.
 export function getAuthUserName() {
   if (typeof window === "undefined") {
     return null;
@@ -75,6 +78,7 @@ export function getAuthUserName() {
   return userName;
 }
 
+// Removes all saved authentication values from browser storage.
 export function clearAuthSession() {
   try {
     window.localStorage.removeItem(TOKEN_STORAGE_KEY);

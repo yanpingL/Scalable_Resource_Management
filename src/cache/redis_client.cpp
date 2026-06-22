@@ -8,11 +8,13 @@ namespace {
 constexpr int DEFAULT_REDIS_POOL_SIZE = 10;
 }
 
+// Returns the shared Redis client singleton.
 RedisClient* RedisClient::get_instance() {
     static RedisClient instance;
     return &instance;
 }
 
+// Closes Redis contexts and wakes any waiting threads during shutdown.
 RedisClient::~RedisClient() {
     std::lock_guard<std::mutex> lock(mtx_);
     clear_pool();
@@ -20,6 +22,7 @@ RedisClient::~RedisClient() {
     cv_.notify_all();
 }
 
+// Initializes the Redis connection pool using the configured host and auth settings.
 bool RedisClient::init(
     const std::string& host,
     int port,
@@ -55,6 +58,7 @@ bool RedisClient::init(
     return true;
 }
 
+// Opens and validates one Redis connection, including optional TLS and auth.
 redisContext* RedisClient::create_connection() {
     redisContext* context = redisConnect(host_.c_str(), port_);
     if (context == nullptr || context->err) {
@@ -131,11 +135,13 @@ redisContext* RedisClient::create_connection() {
     return context;
 }
 
+// Reports whether the Redis pool currently has usable connections.
 bool RedisClient::is_available() const {
     std::lock_guard<std::mutex> lock(mtx_);
     return available_;
 }
 
+// Waits for and leases one Redis context from the pool.
 redisContext* RedisClient::get_connection() {
     std::unique_lock<std::mutex> lock(mtx_);
     if (!available_) {
@@ -155,6 +161,7 @@ redisContext* RedisClient::get_connection() {
     return context;
 }
 
+// Returns a healthy Redis context to the pool.
 void RedisClient::release_connection(redisContext* context) {
     if (context == nullptr) {
         return;
@@ -173,6 +180,7 @@ void RedisClient::release_connection(redisContext* context) {
     cv_.notify_one();
 }
 
+// Drops a failed Redis context and tries to replace it.
 void RedisClient::discard_connection(redisContext* context) {
     if (context != nullptr) {
         redisFree(context);
@@ -193,6 +201,7 @@ void RedisClient::discard_connection(redisContext* context) {
     cv_.notify_all();
 }
 
+// Frees every Redis context currently held by the pool.
 void RedisClient::clear_pool() {
     while (!conn_pool_.empty()) {
         redisFree(conn_pool_.front());
@@ -201,6 +210,7 @@ void RedisClient::clear_pool() {
     max_conn_ = 0;
 }
 
+// Reads a string value from Redis, returning nullopt on miss or failure.
 std::optional<std::string> RedisClient::get(const std::string& key) {
     redisContext* context = get_connection();
     if (context == nullptr) {
@@ -226,6 +236,7 @@ std::optional<std::string> RedisClient::get(const std::string& key) {
     return result;
 }
 
+// Stores a Redis string value with a TTL.
 bool RedisClient::set(const std::string& key, const std::string& value, int ttl_seconds) {
     if (ttl_seconds <= 0) {
         return false;
@@ -251,6 +262,7 @@ bool RedisClient::set(const std::string& key, const std::string& value, int ttl_
     return ok;
 }
 
+// Deletes a Redis key from the cache.
 bool RedisClient::del(const std::string& key) {
     redisContext* context = get_connection();
     if (context == nullptr) {

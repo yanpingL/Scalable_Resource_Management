@@ -23,10 +23,12 @@ const char* error_500_title = "Internal Error";
 const char* error_500_form = "There was an unusual problem serving the request.\n";
 
 namespace {
+// Logs a failed API request with route context.
 void log_request_error(const std::string& route, const std::string& reason) {
     Logger::get_instance()->log(ERROR, route + " failed: " + reason);
 }
 
+// Extracts a readable error message from a JSON API response.
 std::string json_error_message(const json& response) {
     if (!response.contains("error")) {
         return "unknown error";
@@ -37,6 +39,7 @@ std::string json_error_message(const json& response) {
         : response["error"].dump();
 }
 
+// Logs an API service error response with route context.
 void log_service_error(const std::string& route, const json& response) {
     log_request_error(route, json_error_message(response));
 }

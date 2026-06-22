@@ -110,9 +110,11 @@ Browser
               -> Application Load Balancer
                   -> ECS Fargate service
                       -> C++ backend task(s) :8080
+                      -> C++ backend task 2 :8080
+                      -> C++ backend task N :8080
                           -> Amazon RDS PostgreSQL :5432
                           -> Amazon ElastiCache/Valkey :6379
-                          -> S3-compatible object storage
+                          -> Amazon S3
                           -> Amazon CloudWatch Logs log group
 
 GitHub Actions

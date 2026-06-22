@@ -12,6 +12,7 @@ import {
 import { deleteResource, listResources } from "../api";
 import type { Resource } from "../types";
 
+// Renders the authenticated resource dashboard and delete dialog.
 export function ResourceList() {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -41,12 +42,14 @@ export function ResourceList() {
     },
   });
 
+  // Deletes the resource selected in the confirmation dialog.
   function handleConfirmDelete() {
     if (resourceToDelete) {
       deleteMutation.mutate(resourceToDelete.id);
     }
   }
 
+  // Clears browser auth state and returns to the home page.
   function handleLogout() {
     clearAuthSession();
     queryClient.clear();

@@ -7,6 +7,7 @@
 #include <exception>
 
 namespace {
+// Builds a user-service JSON error response from a standard exception.
 json_type user_service_error(const std::string& action, const std::exception& error) {
     json_type res;
     UserDAO::msg = std::string("User service error while ") + action + ": " + error.what();
@@ -15,6 +16,7 @@ json_type user_service_error(const std::string& action, const std::exception& er
     return res;
 }
 
+// Builds a user-service JSON error response from an unknown exception.
 json_type user_service_error(const std::string& action) {
     json_type res;
     UserDAO::msg = std::string("User service error while ") + action + ".";
@@ -27,23 +29,23 @@ json_type user_service_error(const std::string& action) {
 // Creates a user and returns a JSON status object.
 json_type UserService::create_user(const UserInfo& Info) {
     try {
-    // First hash the password
-    std::string pass = sha256(Info.password);
+        // First hash the password
+        std::string pass = sha256(Info.password);
 
-    User newUser;
-    newUser.name = Info.name;
-    newUser.email = Info.email;
-    newUser.password = pass;
-    bool ok = UserDAO::create_user(newUser);
+        User newUser;
+        newUser.name = Info.name;
+        newUser.email = Info.email;
+        newUser.password = pass;
+        bool ok = UserDAO::create_user(newUser);
 
-    json_type res;
+        json_type res;
 
-    if (!ok) {
-        res["error"] = UserDAO::msg;
-    } else {
-        res["status"] = "created";
-    }
-    return res;
+        if (!ok) {
+            res["error"] = UserDAO::msg;
+        } else {
+            res["status"] = "created";
+        }
+        return res;
     } catch (const std::exception& error) {
         return user_service_error("creating a user", error);
     } catch (...) {
@@ -56,38 +58,37 @@ json_type UserService::create_user(const UserInfo& Info) {
 // Authenticates a user, creates a JWT bearer token, and returns login JSON.
 json_type UserService::login(const UserInfo& Info) {
     try {
+        auto user_opt = UserDAO::get_user_by_email(Info.email);
 
-    auto user_opt = UserDAO::get_user_by_email(Info.email);
+        json_type res;
 
-    json_type res;
+        if (!user_opt.has_value()) {
+            res["error"] = UserDAO::msg;
+            return res;
+        }
 
-    if (!user_opt.has_value()) {
-        res["error"] = UserDAO::msg;
+        const auto& user = user_opt.value();
+        // Compare password hash value
+        if (user.password != sha256(Info.password)) {
+            UserDAO::msg = "wrong password";
+            Logger::get_instance()->log(ERROR, UserDAO::msg);
+            res["error"] = UserDAO::msg;
+            return res;
+        }
+        // Generate signed JWT.
+        std::string token = JwtUtils::create_jwt(user.id);
+        if (token.empty()) {
+            UserDAO::msg = "token generation failed";
+            Logger::get_instance()->log(ERROR, UserDAO::msg);
+            res["error"] = UserDAO::msg;
+            return res;
+        }
+
+        res["token"] = token;
+        res["user_id"] = user.id;
+        res["name"] = user.name;
+
         return res;
-    }
-
-    const auto& user = user_opt.value();
-    // Compare password hash value
-    if (user.password != sha256(Info.password)) {
-        UserDAO::msg = "wrong password";
-        Logger::get_instance()->log(ERROR, UserDAO::msg);
-        res["error"] = UserDAO::msg;
-        return res;
-    }
-    // Generate signed JWT.
-    std::string token = JwtUtils::create_jwt(user.id);
-    if (token.empty()) {
-        UserDAO::msg = "token generation failed";
-        Logger::get_instance()->log(ERROR, UserDAO::msg);
-        res["error"] = UserDAO::msg;
-        return res;
-    }
-
-    res["token"] = token;
-    res["user_id"] = user.id;
-    res["name"] = user.name;
-
-    return res;
     } catch (const std::exception& error) {
         return user_service_error("logging in", error);
     } catch (...) {
@@ -107,6 +108,7 @@ std::optional<int> UserService::get_user_id_from_token(const std::string& token)
 }
 
 
+// Returns a logout status response for a valid authenticated request.
 json_type UserService::logout(const std::string& token) {
     try {
         (void)token;

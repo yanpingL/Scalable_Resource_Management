@@ -11,6 +11,7 @@ type FileDownloadButtonProps = {
   resourceId: number;
 };
 
+// Chooses a fallback file name from storage metadata.
 function fallbackFileName(data: DownloadUrlResponse) {
   const objectKeyName = data.object_key.split("/").pop();
   const publicUrlName = data.public_url.split("/").pop()?.split("?")[0];
@@ -18,22 +19,26 @@ function fallbackFileName(data: DownloadUrlResponse) {
   return objectKeyName || publicUrlName || "download";
 }
 
+// Removes characters that are unsafe in browser download names.
 function safeFileName(fileName: string) {
   const normalized = fileName.trim().replace(/[\\/:*?"<>|]+/g, "-");
 
   return normalized || "download";
 }
 
+// Checks whether a file name already has an extension.
 function hasFileExtension(fileName: string) {
   return /\.[A-Za-z0-9]{1,12}$/.test(fileName);
 }
 
+// Extracts the extension from a file name.
 function fileExtension(fileName: string) {
   const match = fileName.match(/(\.[A-Za-z0-9]{1,12})$/);
 
   return match?.[1] ?? "";
 }
 
+// Chooses the final download name, preserving storage extension when needed.
 function downloadFileName(data: DownloadUrlResponse, preferredFileName?: string) {
   const fallback = fallbackFileName(data);
   const preferred = preferredFileName?.trim();
@@ -49,6 +54,7 @@ function downloadFileName(data: DownloadUrlResponse, preferredFileName?: string)
   return `${preferred}${fileExtension(fallback)}`;
 }
 
+// Downloads bytes from a signed URL and triggers the browser save flow.
 async function downloadFromSignedUrl(
   data: DownloadUrlResponse,
   preferredFileName?: string,
@@ -82,6 +88,7 @@ async function downloadFromSignedUrl(
   }
 }
 
+// Renders a button that prepares and downloads a file resource.
 export function FileDownloadButton({
   className,
   fileName,

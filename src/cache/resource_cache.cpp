@@ -44,6 +44,7 @@ void log_cache_write_result(
 }
 }
 
+// Returns cached JSON for one resource, or nullopt on miss.
 std::optional<std::string> ResourceCache::get_resource(int user_id, int resource_id) {
     const std::string key = resource_key(user_id, resource_id);
     auto cached = RedisClient::get_instance()->get(key);
@@ -51,6 +52,7 @@ std::optional<std::string> ResourceCache::get_resource(int user_id, int resource
     return cached;
 }
 
+// Stores serialized JSON for one resource.
 bool ResourceCache::set_resource(int user_id, int resource_id, const std::string& value) {
     const std::string key = resource_key(user_id, resource_id);
     bool ok = RedisClient::get_instance()->set(
@@ -66,6 +68,7 @@ bool ResourceCache::set_resource(int user_id, int resource_id, const std::string
     return ok;
 }
 
+// Deletes one cached resource entry.
 bool ResourceCache::invalidate_resource(int user_id, int resource_id) {
     const std::string key = resource_key(user_id, resource_id);
     bool ok = RedisClient::get_instance()->del(key);
@@ -73,6 +76,7 @@ bool ResourceCache::invalidate_resource(int user_id, int resource_id) {
     return ok;
 }
 
+// Returns cached JSON for a user's resource list, or nullopt on miss.
 std::optional<std::string> ResourceCache::get_resources(int user_id) {
     const std::string key = resources_key(user_id);
     auto cached = RedisClient::get_instance()->get(key);
@@ -80,6 +84,7 @@ std::optional<std::string> ResourceCache::get_resources(int user_id) {
     return cached;
 }
 
+// Stores serialized JSON for a user's resource list.
 bool ResourceCache::set_resources(int user_id, const std::string& value) {
     const std::string key = resources_key(user_id);
     bool ok = RedisClient::get_instance()->set(
@@ -95,6 +100,7 @@ bool ResourceCache::set_resources(int user_id, const std::string& value) {
     return ok;
 }
 
+// Deletes the cached resource list for one user.
 bool ResourceCache::invalidate_resources(int user_id) {
     const std::string key = resources_key(user_id);
     bool ok = RedisClient::get_instance()->del(key);
@@ -102,10 +108,12 @@ bool ResourceCache::invalidate_resources(int user_id) {
     return ok;
 }
 
+// Builds the Redis key for one resource.
 std::string ResourceCache::resource_key(int user_id, int resource_id) {
     return "resource:" + std::to_string(user_id) + ":" + std::to_string(resource_id);
 }
 
+// Builds the Redis key for one user's resource list.
 std::string ResourceCache::resources_key(int user_id) {
     return "resources:user:" + std::to_string(user_id);
 }

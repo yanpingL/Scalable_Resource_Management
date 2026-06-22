@@ -7,6 +7,7 @@ type ProvidersProps = {
   children: React.ReactNode;
 };
 
+// Provides shared client-side libraries to the app tree.
 export function Providers({ children }: ProvidersProps) {
   // One QueryClient owns TanStack Query's client-side cache for the app.
   const [queryClient] = useState(

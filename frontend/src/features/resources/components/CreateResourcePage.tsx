@@ -9,6 +9,7 @@ import { createTextResource } from "../api";
 import type { ResourceFormValues } from "../types";
 import { ResourceForm } from "./ResourceForm";
 
+// Renders the authenticated page for creating a text resource.
 export function CreateResourcePage() {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -27,6 +28,7 @@ export function CreateResourcePage() {
     },
   });
 
+  // Starts the create-resource mutation with form values.
   function handleCreate(values: ResourceFormValues) {
     createMutation.mutate(values);
   }

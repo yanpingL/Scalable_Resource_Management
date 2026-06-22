@@ -7,7 +7,7 @@
 #include <openssl/sha.h>
 #include <openssl/rand.h>
 
-// ===== SHA256 =====
+// Hashes a plaintext value with SHA-256 and returns lowercase hex.
 inline std::string sha256(const std::string& input) {
     unsigned char hash[SHA256_DIGEST_LENGTH];
     SHA256((unsigned char*)input.c_str(), input.size(), hash);
@@ -19,7 +19,7 @@ inline std::string sha256(const std::string& input) {
     return ss.str();
 }
 
-// ===== TOKEN =====
+// Generates a random 256-bit token encoded as lowercase hex.
 inline std::string generate_token() {
     unsigned char bytes[32];
     if (RAND_bytes(bytes, sizeof(bytes)) != 1) {

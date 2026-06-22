@@ -7,6 +7,7 @@ import { FormEvent, useState } from "react";
 import { loginUser } from "../api";
 import { saveAuthSession } from "../authStore";
 
+// Renders the login form and saves the authenticated session.
 export function LoginForm() {
   const router = useRouter();
   const [email, setEmail] = useState("");
@@ -31,6 +32,7 @@ export function LoginForm() {
     onError: () => setSessionError(null),
   });
 
+  // Submits the current credentials to the login mutation.
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSessionError(null);

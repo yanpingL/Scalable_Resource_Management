@@ -19,6 +19,7 @@ const emptyValues: ResourceFormValues = {
   content: "",
 };
 
+// Renders the shared title/content editor used for create and update flows.
 export function ResourceForm({
   editorSize = "default",
   fillAvailableHeight = false,
@@ -32,6 +33,7 @@ export function ResourceForm({
   const [content, setContent] = useState(initialValues.content);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
+  // Sends current form values to the parent submit handler.
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSubmitError(null);

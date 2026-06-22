@@ -10,6 +10,7 @@ export class ApiError extends Error {
   }
 }
 
+// Converts an unknown thrown value into displayable request error text.
 function messageFromUnknownError(error: unknown) {
   if (error instanceof Error && error.message) {
     return error.message;

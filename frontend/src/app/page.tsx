@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+// Renders the public home page and navigation entry points.
 export default function Home() {
   return (
     <main className="relative h-screen overflow-hidden bg-[#202124] text-white">

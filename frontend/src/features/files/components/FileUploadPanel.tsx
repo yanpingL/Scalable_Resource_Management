@@ -19,6 +19,7 @@ type FileUploadPanelProps = {
   onUploaded?: () => void;
 };
 
+// Renders the file upload form and coordinates presigned upload flow.
 export function FileUploadPanel({ onUploaded }: FileUploadPanelProps) {
   const queryClient = useQueryClient();
   // UI state: title is typed text; file is the selected local File object.
@@ -53,6 +54,7 @@ export function FileUploadPanel({ onUploaded }: FileUploadPanelProps) {
     },
   });
 
+  // Submits the selected file through the upload mutation.
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     uploadMutation.mutate();

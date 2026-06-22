@@ -78,6 +78,7 @@ private:
 
     // Request parsing helpers used by process_read().
     LINE_STATUS parse_line();
+    // Returns a pointer to the current parsed request line.
     char * get_line() { return m_read_buf + m_start_line;} // Current line start in read buffer
     HTTP_CODE parse_request_line(char * text);
     HTTP_CODE parse_headers(char * text);

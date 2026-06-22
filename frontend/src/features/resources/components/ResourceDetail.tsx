@@ -18,6 +18,7 @@ type ResourceDetailProps = {
   id: number;
 };
 
+// Adds PDF viewer hints so document previews fit the available width.
 function appendPdfFitFragment(url: string) {
   if (!url.toLowerCase().includes(".pdf")) {
     return url;
@@ -26,16 +27,19 @@ function appendPdfFitFragment(url: string) {
   return `${url}#view=FitH&zoom=page-width`;
 }
 
+// Detects whether a file resource should be previewed as an image.
 function isImageResource(title: string, content: string) {
   return /\.(png|jpe?g|gif|webp|bmp|svg)(\?|#|$)/i.test(`${title} ${content}`);
 }
 
+// Removes characters that are unsafe in browser download names.
 function safeFileName(fileName: string) {
   const normalized = fileName.trim().replace(/[\\/:*?"<>|]+/g, "-");
 
   return normalized || "resource";
 }
 
+// Builds the download file name for text resources.
 function textDownloadFileName(title: string) {
   const fileName = safeFileName(title || "resource");
 
@@ -46,6 +50,7 @@ function textDownloadFileName(title: string) {
   return `${fileName}.md`;
 }
 
+// Downloads a text resource as a Markdown file.
 function downloadTextResource(title: string, content: string) {
   const blob = new Blob([content], {
     type: "text/markdown;charset=utf-8",
@@ -61,6 +66,7 @@ function downloadTextResource(title: string, content: string) {
   URL.revokeObjectURL(objectUrl);
 }
 
+// Renders the authenticated detail, edit, preview, download, and delete view.
 export function ResourceDetail({ id }: ResourceDetailProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -104,10 +110,12 @@ export function ResourceDetail({ id }: ResourceDetailProps) {
     },
   });
 
+  // Sends edited text values through the update mutation.
   function handleSave(values: ResourceFormValues) {
     updateMutation.mutate(values);
   }
 
+  // Saves a new title for file resources while preserving the file URL.
   function handleFileTitleSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!resourceQuery.data) {
@@ -123,6 +131,7 @@ export function ResourceDetail({ id }: ResourceDetailProps) {
     });
   }
 
+  // Downloads a text resource and surfaces browser download failures.
   function handleTextDownload(title: string, content: string) {
     setDownloadError(null);
 

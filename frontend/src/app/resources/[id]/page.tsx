@@ -6,6 +6,7 @@ type ResourceDetailPageProps = {
   }>;
 };
 
+// Converts the dynamic route id into the resource detail component.
 export default async function ResourceDetailPage({
   params,
 }: ResourceDetailPageProps) {

@@ -6,6 +6,7 @@ import { useEffect } from "react";
 import { getAuthToken } from "@/features/auth/authStore";
 import { FileUploadPanel } from "./FileUploadPanel";
 
+// Renders the authenticated file upload page.
 export function UploadFilePage() {
   const router = useRouter();
 

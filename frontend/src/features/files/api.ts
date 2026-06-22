@@ -8,12 +8,14 @@ import type {
 } from "./types";
 
 // File feature API: presigned URLs keep file bytes out of the C++ server.
+// Builds Authorization headers from the current browser auth session.
 function authHeaders(): HeadersInit {
   const token = getAuthToken();
 
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+// Requests a short-lived upload URL from the backend.
 export function requestUploadUrl(payload: UploadUrlRequest) {
   return apiFetch<UploadUrlResponse>("/api/files/upload-url", {
     method: "POST",
@@ -22,6 +24,7 @@ export function requestUploadUrl(payload: UploadUrlRequest) {
   });
 }
 
+// Uploads file bytes directly to object storage through a presigned URL.
 export async function uploadFileToStorage(file: File, uploadUrl: string) {
   // This PUT goes directly to MinIO/S3, not to the Next.js or C++ app.
   try {
@@ -45,6 +48,7 @@ export async function uploadFileToStorage(file: File, uploadUrl: string) {
   }
 }
 
+// Requests a short-lived download URL for a file resource.
 export function requestDownloadUrl(resourceId: number) {
   return apiFetch<DownloadUrlResponse>(
     `/api/files/download-url?resource_id=${resourceId}`,

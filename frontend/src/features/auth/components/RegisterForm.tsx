@@ -7,6 +7,7 @@ import { FormEvent, useState } from "react";
 import { loginUser, registerUser } from "../api";
 import { saveAuthSession } from "../authStore";
 
+// Renders the registration form and signs the user in after creation.
 export function RegisterForm() {
   const router = useRouter();
   const [name, setName] = useState("");
@@ -35,6 +36,7 @@ export function RegisterForm() {
     onError: () => setSessionError(null),
   });
 
+  // Submits the registration form through the register/login mutation.
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSessionError(null);
