@@ -30,7 +30,7 @@ env:
   ECR_REPOSITORY: webserver-backend
   ECS_TASK_DEFINITION: ecs-task-definition.json
   ECS_CONTAINER_NAME: webserver-backend
-  ECS_DESIRED_COUNT: 2
+  ECS_DESIRED_COUNT: 1
 
 jobs:
   deploy:
