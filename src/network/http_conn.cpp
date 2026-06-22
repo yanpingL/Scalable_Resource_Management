@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <exception>
 
 // Define some stat info of the HTTP response
 const char* ok_200_title = "OK";
@@ -20,6 +21,26 @@ const char* error_404_title = "Not Found";
 const char* error_404_form = "The requested route was not found on this server.\n";
 const char* error_500_title = "Internal Error";
 const char* error_500_form = "There was an unusual problem serving the request.\n";
+
+namespace {
+void log_request_error(const std::string& route, const std::string& reason) {
+    Logger::get_instance()->log(ERROR, route + " failed: " + reason);
+}
+
+std::string json_error_message(const json& response) {
+    if (!response.contains("error")) {
+        return "unknown error";
+    }
+
+    return response["error"].is_string()
+        ? response["error"].get<std::string>()
+        : response["error"].dump();
+}
+
+void log_service_error(const std::string& route, const json& response) {
+    log_request_error(route, json_error_message(response));
+}
+}
 
 // epoll helper functions shared with main.cpp.
 void setnonblock(int fd){
@@ -75,16 +96,37 @@ void http_conn::init(int sockfd, const sockaddr_in &addr){
 
 // Worker-thread entry point for a completed read event.
 void http_conn::process() {
-    HTTP_CODE read_ret = process_read();
+    HTTP_CODE read_ret = INTERNAL_ERROR;
+    try {
+        read_ret = process_read();
+    } catch (const std::exception& error) {
+        Logger::get_instance()->log(
+            ERROR,
+            std::string("request processing failed: ") + error.what());
+        json_res = "{\"error\":\"internal server error\"}";
+    } catch (...) {
+        Logger::get_instance()->log(ERROR, "request processing failed");
+        json_res = "{\"error\":\"internal server error\"}";
+    }
 
     if(read_ret == NO_REQUEST){
         modfd(m_epollfd, m_sockfd, EPOLLIN);
         return;
     }
 
-    bool write_ret = process_write(read_ret);
+    bool write_ret = false;
+    try {
+        write_ret = process_write(read_ret);
+    } catch (const std::exception& error) {
+        Logger::get_instance()->log(
+            ERROR,
+            std::string("response writing failed: ") + error.what());
+    } catch (...) {
+        Logger::get_instance()->log(ERROR, "response writing failed");
+    }
     if(!write_ret) {
         close_conn();
+        return;
     }
     modfd(m_epollfd, m_sockfd, EPOLLOUT);
 }
@@ -449,9 +491,11 @@ http_conn::HTTP_CODE http_conn::handle_register(char * text){
             j = json::parse(body);
         } catch(const json::parse_error& e){
             json_res = "{\"error\":\"invalid JSON format\"}";
+            log_request_error("POST /api/register", std::string("invalid JSON format: ") + e.what());
             return BAD_REQUEST;
         } catch (...){
             json_res = "{\"error\":\"internal error\"}";
+            log_request_error("POST /api/register", "unexpected JSON parse error");
             return INTERNAL_ERROR;
         }
 
@@ -460,6 +504,7 @@ http_conn::HTTP_CODE http_conn::handle_register(char * text){
             !j.contains("email") || !j["email"].is_string() ||
             !j.contains("password") || !j["password"].is_string()) {
             json_res = "{\"error\":\"missing fields\"}";
+            log_request_error("POST /api/register", "missing fields");
             return BAD_REQUEST;
         }
 
@@ -472,6 +517,7 @@ http_conn::HTTP_CODE http_conn::handle_register(char * text){
         json res = UserService::create_user(info);
         json_res = res.dump();
         if (res.contains("error")){
+            log_service_error("POST /api/register", res);
             return BAD_REQUEST;
         } else {
             return ADD_RESOURCE;
@@ -490,9 +536,11 @@ http_conn::HTTP_CODE http_conn::handle_login(char* text) {
         j = json::parse(body);
     } catch(const json::parse_error& e){
         json_res = "{\"error\":\"invalid JSON format\"}";
+        log_request_error("POST /api/login", std::string("invalid JSON format: ") + e.what());
         return BAD_REQUEST;
     } catch (...){
         json_res = "{\"error\":\"internal error\"}";
+        log_request_error("POST /api/login", "unexpected JSON parse error");
         return INTERNAL_ERROR;
     }
 
@@ -512,7 +560,7 @@ http_conn::HTTP_CODE http_conn::handle_login(char* text) {
     json_res = res.dump();
 
     if (res.contains("error")) {
-        Logger::get_instance()->log(ERROR, res["error"]);
+        log_service_error("POST /api/login", res);
         return BAD_REQUEST;
     }
     return GET_RESOURCE;
@@ -568,6 +616,7 @@ http_conn::HTTP_CODE http_conn::handle_get_resources(){
         if (key != "id" || value.empty() ||
             !std::all_of(value.begin(), value.end(), ::isdigit)) {
             json_res = "{\"error\":\"invalid parameter\"}";
+            log_request_error("GET /api/resources", "invalid id parameter");
             return BAD_REQUEST;
         }
     }
@@ -579,6 +628,7 @@ http_conn::HTTP_CODE http_conn::handle_get_resources(){
 
     json_res = res.dump();
     if (res.contains("error")){
+        log_service_error("GET /api/resources", res);
         return BAD_REQUEST;
     } else {
         return GET_RESOURCE;
@@ -608,6 +658,7 @@ http_conn::HTTP_CODE http_conn::handle_delete_resource(){
         || !std::all_of(value.begin(), value.end(), ::isdigit)){
 
         json_res = "{\"error\":\"invalid parameter\"}";
+        log_request_error("DELETE /api/resources", "invalid id parameter");
         return BAD_REQUEST;
     }
 
@@ -616,6 +667,7 @@ http_conn::HTTP_CODE http_conn::handle_delete_resource(){
     json_res = res.dump();
 
     if (res.contains("error")){
+        log_service_error("DELETE /api/resources", res);
         return BAD_REQUEST;
     } else {
         return DELETE_RESOURCE;
@@ -641,22 +693,27 @@ http_conn::HTTP_CODE http_conn::handle_post_resource(char * text){
         j = json::parse(body);
     } catch(const json::parse_error& e){
         json_res = "{\"error\":\"invalid JSON format\"}";
+        log_request_error("POST /api/resources", std::string("invalid JSON format: ") + e.what());
         return BAD_REQUEST;
     } catch (...){
         json_res = "{\"error\":\"internal error\"}";
+        log_request_error("POST /api/resources", "unexpected JSON parse error");
         return INTERNAL_ERROR;
     }
 
     if (j.contains("title") && !j["title"].is_string()){
         json_res = "{\"error\":\"invalid title\"}";
+        log_request_error("POST /api/resources", "invalid title");
         return BAD_REQUEST;
     }
     if (j.contains("content") && !j["content"].is_string()){
         json_res = "{\"error\":\"invalid content\"}";
+        log_request_error("POST /api/resources", "invalid content");
         return BAD_REQUEST;
     }
     if (j.contains("is_file") && !j["is_file"].is_boolean()){
         json_res = "{\"error\":\"invalid is_file\"}";
+        log_request_error("POST /api/resources", "invalid is_file");
         return BAD_REQUEST;
     }
 
@@ -671,6 +728,7 @@ http_conn::HTTP_CODE http_conn::handle_post_resource(char * text){
     json res = ResourceService::create_resource(newResource);
     json_res = res.dump();
     if (res.contains("error")){
+        log_service_error("POST /api/resources", res);
         return BAD_REQUEST;
     } else {
         return ADD_RESOURCE;
@@ -696,14 +754,17 @@ http_conn::HTTP_CODE http_conn::handle_put_resource(char* text){
         j = json::parse(body);
     } catch(const json::parse_error& e){
         json_res = "{\"error\":\"invalid JSON format\"}";
+        log_request_error("PUT /api/resources", std::string("invalid JSON format: ") + e.what());
         return BAD_REQUEST;
     } catch (...){
         json_res = "{\"error\":\"internal error\"}";
+        log_request_error("PUT /api/resources", "unexpected JSON parse error");
         return INTERNAL_ERROR;
     }
 
     if (!j.contains("id") || !j["id"].is_number_integer()){
         json_res = "{\"error\":\"invalid id\"}";
+        log_request_error("PUT /api/resources", "invalid id");
         return BAD_REQUEST;
     }
     int id = j["id"];
@@ -718,6 +779,7 @@ http_conn::HTTP_CODE http_conn::handle_put_resource(char* text){
     json_res = res.dump();
 
     if (res.contains("error")){
+        log_service_error("PUT /api/resources", res);
         return BAD_REQUEST;
     } else {
         return UPDATE_RESOURCE;
@@ -742,15 +804,18 @@ http_conn::HTTP_CODE http_conn::handle_create_upload_url(char* text) {
         j = json::parse(body);
     } catch (const json::parse_error& e) {
         json_res = "{\"error\":\"invalid JSON format\"}";
+        log_request_error("POST /api/files/upload-url", std::string("invalid JSON format: ") + e.what());
         return BAD_REQUEST;
     } catch (...) {
         json_res = "{\"error\":\"internal error\"}";
+        log_request_error("POST /api/files/upload-url", "unexpected JSON parse error");
         return INTERNAL_ERROR;
     }
 
     if (!j.contains("filename") || !j["filename"].is_string() ||
         !j.contains("content_type") || !j["content_type"].is_string()) {
         json_res = "{\"error\":\"missing fields\"}";
+        log_request_error("POST /api/files/upload-url", "missing fields");
         return BAD_REQUEST;
     }
 
@@ -761,6 +826,7 @@ http_conn::HTTP_CODE http_conn::handle_create_upload_url(char* text) {
 
     json_res = res.dump();
     if (res.contains("error")) {
+        log_service_error("POST /api/files/upload-url", res);
         return BAD_REQUEST;
     }
     return GET_RESOURCE;
@@ -786,6 +852,7 @@ http_conn::HTTP_CODE http_conn::handle_create_download_url() {
     if (key != "resource_id" || value.empty() ||
         !std::all_of(value.begin(), value.end(), ::isdigit)) {
         json_res = "{\"error\":\"invalid parameter\"}";
+        log_request_error("GET /api/files/download-url", "invalid resource_id parameter");
         return BAD_REQUEST;
     }
 
@@ -795,6 +862,7 @@ http_conn::HTTP_CODE http_conn::handle_create_download_url() {
 
     json_res = res.dump();
     if (res.contains("error")) {
+        log_service_error("GET /api/files/download-url", res);
         return BAD_REQUEST;
     }
     return GET_RESOURCE;

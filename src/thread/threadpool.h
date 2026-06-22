@@ -81,6 +81,7 @@ bool threadpool<T>::append(T *request){
     {
         std::lock_guard<std::mutex> lock(m_queuelocker);
         if(m_workqueue.size() >= static_cast<std::size_t>(m_max_requests)){
+            Logger::get_instance()->log(ERROR, "thread pool queue is full; request rejected");
             return false;
         }
 

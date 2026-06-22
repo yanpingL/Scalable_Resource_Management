@@ -15,7 +15,7 @@ import type { Resource } from "../types";
 export function ResourceList() {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const [userName, setUserName] = useState("");
+  const [userName] = useState(() => getAuthUserName() ?? "");
   const [resourceToDelete, setResourceToDelete] = useState<Resource | null>(
     null,
   );
@@ -26,8 +26,6 @@ export function ResourceList() {
       router.replace("/login");
       return;
     }
-
-    setUserName(getAuthUserName() ?? "");
   }, [router]);
 
   const resourcesQuery = useQuery({

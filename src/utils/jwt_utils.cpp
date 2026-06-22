@@ -1,11 +1,14 @@
 #include "utils/jwt_utils.h"
 
 #include "utils/env_utils.h"
+#include "utils/logger.h"
 
 #include <jwt-cpp/traits/nlohmann-json/defaults.h>
 
 #include <chrono>
 #include <cstdlib>
+#include <exception>
+#include <string>
 
 std::string JwtUtils::get_secret() {
     return EnvUtils::get_env_or_default("JWT_SECRET", "");
@@ -24,6 +27,7 @@ std::string JwtUtils::create_jwt(int user_id) {
     const std::string secret = get_secret();
     const int expires_seconds = get_expires_seconds();
     if (secret.empty() || expires_seconds <= 0) {
+        Logger::get_instance()->log(ERROR, "JWT creation failed: invalid JWT configuration");
         return "";
     }
 
@@ -41,6 +45,11 @@ std::string JwtUtils::create_jwt(int user_id) {
 std::optional<int> JwtUtils::verify_jwt_and_get_user_id(const std::string& token) {
     const std::string secret = get_secret();
     if (secret.empty() || token.empty()) {
+        Logger::get_instance()->log(
+            ERROR,
+            secret.empty()
+                ? "JWT verification failed: missing JWT secret"
+                : "JWT verification failed: empty token");
         return std::nullopt;
     }
 
@@ -59,11 +68,18 @@ std::optional<int> JwtUtils::verify_jwt_and_get_user_id(const std::string& token
         char* end = nullptr;
         long user_id = std::strtol(subject.c_str(), &end, 10);
         if (end == subject.c_str() || *end != '\0' || user_id <= 0) {
+            Logger::get_instance()->log(ERROR, "JWT verification failed: invalid subject");
             return std::nullopt;
         }
 
         return static_cast<int>(user_id);
+    } catch (const std::exception& error) {
+        Logger::get_instance()->log(
+            ERROR,
+            std::string("JWT verification failed: ") + error.what());
+        return std::nullopt;
     } catch (...) {
+        Logger::get_instance()->log(ERROR, "JWT verification failed");
         return std::nullopt;
     }
 }

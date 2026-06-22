@@ -12,6 +12,7 @@ export function RegisterForm() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [sessionError, setSessionError] = useState<string | null>(null);
 
   // Register first, then login so the app receives a JWT immediately.
   const registerMutation = useMutation({
@@ -20,13 +21,23 @@ export function RegisterForm() {
       return loginUser({ email, password });
     },
     onSuccess: (data) => {
-      saveAuthSession(data.token, data.user_id, data.name);
-      router.push("/resources");
+      try {
+        saveAuthSession(data.token, data.user_id, data.name);
+        router.push("/resources");
+      } catch (error) {
+        setSessionError(
+          error instanceof Error
+            ? error.message
+            : "Unable to save login session.",
+        );
+      }
     },
+    onError: () => setSessionError(null),
   });
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setSessionError(null);
     registerMutation.mutate();
   }
 
@@ -90,6 +101,12 @@ export function RegisterForm() {
         {registerMutation.isError ? (
           <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
             {registerMutation.error.message}
+          </p>
+        ) : null}
+
+        {sessionError ? (
+          <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+            {sessionError}
           </p>
         ) : null}
 

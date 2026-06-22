@@ -17,6 +17,13 @@ aws rds describe-db-instances \
 
 echo
 echo "ECS:"
+task_definition_arn="$(aws ecs describe-services \
+  --region "${AWS_REGION}" \
+  --cluster "${ECS_CLUSTER}" \
+  --services "${ECS_SERVICE}" \
+  --query "services[0].taskDefinition" \
+  --output text)"
+
 aws ecs describe-services \
   --region "${AWS_REGION}" \
   --cluster "${ECS_CLUSTER}" \
@@ -25,9 +32,9 @@ aws ecs describe-services \
   --output table
 
 echo
-echo "Valkey/Redis:"
-aws elasticache describe-replication-groups \
+echo "Redis sidecar:"
+aws ecs describe-task-definition \
   --region "${AWS_REGION}" \
-  --replication-group-id "${REDIS_REPLICATION_GROUP_ID:-webserver-valkey}" \
-  --query "ReplicationGroups[0].{id:ReplicationGroupId,status:Status,nodeType:CacheNodeType,automaticFailover:AutomaticFailover,multiAZ:MultiAZ,activeNodes:NodeGroups[0].NodeGroupMembers[*].CacheClusterId,primaryEndpoint:NodeGroups[0].PrimaryEndpoint.Address}" \
+  --task-definition "${task_definition_arn}" \
+  --query "taskDefinition.containerDefinitions[?name=='redis'].{name:name,image:image,essential:essential,healthCheck:healthCheck.command}" \
   --output table

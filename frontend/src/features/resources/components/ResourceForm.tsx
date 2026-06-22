@@ -30,10 +30,19 @@ export function ResourceForm({
 }: ResourceFormProps) {
   const [title, setTitle] = useState(initialValues.title);
   const [content, setContent] = useState(initialValues.content);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    onSubmit({ title, content });
+    setSubmitError(null);
+
+    try {
+      onSubmit({ title, content });
+    } catch (error) {
+      setSubmitError(
+        error instanceof Error ? error.message : "Unable to submit resource.",
+      );
+    }
   }
 
   return (
@@ -91,6 +100,12 @@ export function ResourceForm({
           </button>
         ) : null}
       </div>
+
+      {submitError ? (
+        <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+          {submitError}
+        </p>
+      ) : null}
     </form>
   );
 }

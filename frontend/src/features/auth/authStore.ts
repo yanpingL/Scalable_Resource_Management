@@ -23,14 +23,18 @@ export function saveAuthSession(
   userId: number,
   userName?: string,
 ) {
-  window.localStorage.setItem(TOKEN_STORAGE_KEY, token);
-  window.localStorage.setItem(USER_ID_STORAGE_KEY, String(userId));
+  try {
+    window.localStorage.setItem(TOKEN_STORAGE_KEY, token);
+    window.localStorage.setItem(USER_ID_STORAGE_KEY, String(userId));
 
-  const normalizedUserName = normalizeUserName(userName);
-  if (normalizedUserName) {
-    window.localStorage.setItem(USER_NAME_STORAGE_KEY, normalizedUserName);
-  } else {
-    window.localStorage.removeItem(USER_NAME_STORAGE_KEY);
+    const normalizedUserName = normalizeUserName(userName);
+    if (normalizedUserName) {
+      window.localStorage.setItem(USER_NAME_STORAGE_KEY, normalizedUserName);
+    } else {
+      window.localStorage.removeItem(USER_NAME_STORAGE_KEY);
+    }
+  } catch {
+    throw new Error("Unable to save login session in this browser.");
   }
 }
 
@@ -39,7 +43,11 @@ export function getAuthToken() {
     return null;
   }
 
-  return window.localStorage.getItem(TOKEN_STORAGE_KEY);
+  try {
+    return window.localStorage.getItem(TOKEN_STORAGE_KEY);
+  } catch {
+    return null;
+  }
 }
 
 export function getAuthUserName() {
@@ -47,19 +55,32 @@ export function getAuthUserName() {
     return null;
   }
 
-  const userName = normalizeUserName(
-    window.localStorage.getItem(USER_NAME_STORAGE_KEY),
-  );
+  let userName: string | null = null;
+  try {
+    userName = normalizeUserName(
+      window.localStorage.getItem(USER_NAME_STORAGE_KEY),
+    );
+  } catch {
+    return null;
+  }
 
   if (!userName) {
-    window.localStorage.removeItem(USER_NAME_STORAGE_KEY);
+    try {
+      window.localStorage.removeItem(USER_NAME_STORAGE_KEY);
+    } catch {
+      return null;
+    }
   }
 
   return userName;
 }
 
 export function clearAuthSession() {
-  window.localStorage.removeItem(TOKEN_STORAGE_KEY);
-  window.localStorage.removeItem(USER_ID_STORAGE_KEY);
-  window.localStorage.removeItem(USER_NAME_STORAGE_KEY);
+  try {
+    window.localStorage.removeItem(TOKEN_STORAGE_KEY);
+    window.localStorage.removeItem(USER_ID_STORAGE_KEY);
+    window.localStorage.removeItem(USER_NAME_STORAGE_KEY);
+  } catch {
+    // Ignore storage cleanup errors so logout/navigation can still proceed.
+  }
 }

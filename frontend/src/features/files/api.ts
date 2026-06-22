@@ -35,7 +35,13 @@ export async function uploadFileToStorage(file: File, uploadUrl: string) {
       throw new Error(`File upload failed with status ${error.response.status}`);
     }
 
-    throw error;
+    if (axios.isAxiosError(error)) {
+      throw new Error("File upload failed. Please check your connection.");
+    }
+
+    throw new Error(
+      error instanceof Error ? error.message : "File upload failed.",
+    );
   }
 }
 

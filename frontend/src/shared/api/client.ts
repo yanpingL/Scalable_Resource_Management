@@ -6,7 +6,16 @@ export class ApiError extends Error {
     readonly status: number,
   ) {
     super(message);
+    this.name = "ApiError";
   }
+}
+
+function messageFromUnknownError(error: unknown) {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  return "Request failed. Please try again.";
 }
 
 // Shared HTTP wrapper: feature APIs call this instead of using HTTP clients directly.
@@ -43,6 +52,10 @@ export async function apiFetch<T>(
       throw new ApiError(message, error.response.status);
     }
 
-    throw error;
+    if (axios.isAxiosError(error)) {
+      throw new ApiError("Network request failed. Please try again.", 0);
+    }
+
+    throw new ApiError(messageFromUnknownError(error), 0);
   }
 }

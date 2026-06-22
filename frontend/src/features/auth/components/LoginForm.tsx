@@ -11,18 +11,29 @@ export function LoginForm() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [sessionError, setSessionError] = useState<string | null>(null);
 
   // Mutations represent user-triggered backend actions such as login.
   const loginMutation = useMutation({
     mutationFn: loginUser,
     onSuccess: (data) => {
-      saveAuthSession(data.token, data.user_id, data.name);
-      router.push("/resources");
+      try {
+        saveAuthSession(data.token, data.user_id, data.name);
+        router.push("/resources");
+      } catch (error) {
+        setSessionError(
+          error instanceof Error
+            ? error.message
+            : "Unable to save login session.",
+        );
+      }
     },
+    onError: () => setSessionError(null),
   });
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setSessionError(null);
     // Current form state becomes the request body for POST /api/login.
     loginMutation.mutate({ email, password });
   }
@@ -76,6 +87,12 @@ export function LoginForm() {
         {loginMutation.isError ? (
           <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
             {loginMutation.error.message}
+          </p>
+        ) : null}
+
+        {sessionError ? (
+          <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+            {sessionError}
           </p>
         ) : null}
 

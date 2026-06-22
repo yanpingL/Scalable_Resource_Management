@@ -14,6 +14,13 @@ public:
         PGresult* result,
         const std::string& sql,
         std::string& msg) {
+        if (result == nullptr) {
+            msg = std::string("Query failed: ") +
+                (conn != nullptr ? PQerrorMessage(conn) : "missing database connection");
+            Logger::get_instance()->log(ERROR, msg + " SQL: " + sql);
+            return false;
+        }
+
         bool success = PQresultStatus(result) == PGRES_COMMAND_OK;
         if (!success) {
             msg = std::string("Query failed: ") + PQerrorMessage(conn);
@@ -23,6 +30,10 @@ public:
     }
 
     static bool affected_rows(PGresult* result) {
+        if (result == nullptr) {
+            return false;
+        }
+
         const char* rows = PQcmdTuples(result);
         return rows != nullptr && rows[0] != '\0' && std::atoi(rows) > 0;
     }
@@ -33,7 +44,12 @@ public:
     }
 
     static std::string nullable_value(PGresult* result, int row, int col) {
-        return PQgetisnull(result, row, col) ? "" : PQgetvalue(result, row, col);
+        if (result == nullptr || PQgetisnull(result, row, col)) {
+            return "";
+        }
+
+        const char* value = PQgetvalue(result, row, col);
+        return value != nullptr ? value : "";
     }
 };
 

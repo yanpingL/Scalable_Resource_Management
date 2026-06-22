@@ -53,22 +53,33 @@ async function downloadFromSignedUrl(
   data: DownloadUrlResponse,
   preferredFileName?: string,
 ) {
-  const response = await fetch(data.download_url);
+  let objectUrl: string | null = null;
 
-  if (!response.ok) {
-    throw new Error(`Download failed with status ${response.status}`);
+  try {
+    const response = await fetch(data.download_url);
+
+    if (!response.ok) {
+      throw new Error(`Download failed with status ${response.status}`);
+    }
+
+    const blob = await response.blob();
+    objectUrl = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+
+    link.href = objectUrl;
+    link.download = safeFileName(downloadFileName(data, preferredFileName));
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  } catch (error) {
+    throw new Error(
+      error instanceof Error ? error.message : "Download failed.",
+    );
+  } finally {
+    if (objectUrl) {
+      URL.revokeObjectURL(objectUrl);
+    }
   }
-
-  const blob = await response.blob();
-  const objectUrl = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-
-  link.href = objectUrl;
-  link.download = safeFileName(downloadFileName(data, preferredFileName));
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(objectUrl);
 }
 
 export function FileDownloadButton({

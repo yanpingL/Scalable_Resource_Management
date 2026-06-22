@@ -66,6 +66,7 @@ export function ResourceDetail({ id }: ResourceDetailProps) {
   const queryClient = useQueryClient();
   const [isEditing, setIsEditing] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
 
   // Detail pages still use the browser JWT, so unauthorized users go to login.
   useEffect(() => {
@@ -120,6 +121,18 @@ export function ResourceDetail({ id }: ResourceDetailProps) {
       title,
       content: resourceQuery.data.content,
     });
+  }
+
+  function handleTextDownload(title: string, content: string) {
+    setDownloadError(null);
+
+    try {
+      downloadTextResource(title, content);
+    } catch (error) {
+      setDownloadError(
+        error instanceof Error ? error.message : "Unable to download resource.",
+      );
+    }
   }
 
   return (
@@ -184,6 +197,12 @@ export function ResourceDetail({ id }: ResourceDetailProps) {
         {deleteMutation.isError && !isDeleteModalOpen ? (
           <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
             {deleteMutation.error.message}
+          </p>
+        ) : null}
+
+        {downloadError ? (
+          <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+            {downloadError}
           </p>
         ) : null}
 
@@ -277,7 +296,7 @@ export function ResourceDetail({ id }: ResourceDetailProps) {
                     <button
                       className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-slate-700"
                       onClick={() =>
-                        downloadTextResource(
+                        handleTextDownload(
                           resourceQuery.data.title,
                           resourceQuery.data.content,
                         )
