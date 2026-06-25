@@ -534,13 +534,13 @@ deploy/aws/s3-cors.production.json
 ```bash
 curl -s -X POST http://localhost:8080/api/register \
   -H "Content-Type: application/json" \
-  -d '{"name":"Andrew","email":"andrew@test.com","password":"hash3"}'
+  -d '{"name":"Andy","email":"andy@test.com","password":"hash3"}'
 ```
 
 ```bash
 LOGIN_RESPONSE="$(curl -s -X POST http://localhost:8080/api/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"andrew@test.com","password":"hash3"}')"
+  -d '{"email":"andy@test.com","password":"hash3"}')"
 
 TOKEN="$(printf '%s' "$LOGIN_RESPONSE" | jq -r '.token')"
 ```
