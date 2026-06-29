@@ -41,11 +41,13 @@ target_include_directories(${PROJECT_NAME}
 # - OpenSSL: SHA256 hashing in auth_utils.h
 # - nlohmann_json: JSON parsing/serialization in HTTP and service layers
 # - jwt-cpp: JWT creation and verification for bearer authentication
+# - AWS SDK S3: presigned URLs for real AWS S3 endpoints
 # - PostgreSQL: libpq client library used by the database layer
 find_package(Threads REQUIRED)
 find_package(OpenSSL REQUIRED)
 find_package(CURL REQUIRED)
 find_package(GTest REQUIRED)
+find_package(AWSSDK REQUIRED COMPONENTS s3)
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(miniocpp CONFIG REQUIRED)
 find_package(jwt-cpp CONFIG REQUIRED)
@@ -59,6 +61,7 @@ target_link_libraries(${PROJECT_NAME}
         Threads::Threads
         OpenSSL::Crypto
         CURL::libcurl
+        ${AWSSDK_LINK_LIBRARIES}
         hiredis::hiredis
         hiredis::hiredis_ssl
         nlohmann_json::nlohmann_json
