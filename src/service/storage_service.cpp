@@ -2,20 +2,19 @@
 #include "utils/env_utils.h"
 #include "utils/logger.h"
 
+#include <aws/core/Aws.h>
+#include <aws/core/auth/AWSCredentials.h>
+#include <aws/core/client/ClientConfiguration.h>
+#include <aws/core/http/HttpTypes.h>
+#include <aws/s3/S3Client.h>
 #include <miniocpp/client.h>
 
 #include <algorithm>
 #include <chrono>
 #include <cctype>
-#include <ctime>
 #include <exception>
-#include <iomanip>
-#include <openssl/hmac.h>
-#include <openssl/sha.h>
-#include <sstream>
 #include <string>
 #include <set>
-#include <vector>
 
 namespace {
 
@@ -110,6 +109,7 @@ std::string sanitize_filename(const std::string& filename) {
 
 // Lowercases a string for case-insensitive validation checks.
 std::string to_lower(std::string value) {
+    // std::tolower expects either EOF(end of file) or a value representable as unsigned char
     std::transform(value.begin(), value.end(), value.begin(),
         [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
     return value;
@@ -126,6 +126,7 @@ std::string file_extension(const std::string& filename) {
 
 // Rejects filenames that try to include directories or parent-directory markers.
 bool has_path_traversal(const std::string& filename) {
+    // std::string::npos --> no position, not found
     return filename.find('/') != std::string::npos ||
         filename.find('\\') != std::string::npos ||
         filename.find("..") != std::string::npos;
@@ -152,12 +153,15 @@ bool is_blocked_extension(const std::string& filename) {
     return blocked.count(file_extension(filename)) > 0;
 }
 
-// Converts a MinIO HTTP method enum into its request method name.
-std::string method_name(minio::http::Method method) {
+Aws::String aws_string(const std::string& value) {
+    return Aws::String(value.data(), value.size());
+}
+
+Aws::Http::HttpMethod aws_http_method(minio::http::Method method) {
     if (method == minio::http::Method::kPut) {
-        return "PUT";
+        return Aws::Http::HttpMethod::HTTP_PUT;
     }
-    return "GET";
+    return Aws::Http::HttpMethod::HTTP_GET;
 }
 
 // Writes a storage-layer failure to the backend logger.
@@ -173,66 +177,24 @@ storage_json storage_error(const std::string& message) {
     return res;
 }
 
-// Encodes binary bytes as lowercase hexadecimal text.
-std::string hex_encode(const unsigned char* data, std::size_t len) {
-    std::ostringstream out;
-    out << std::hex << std::setfill('0');
-    for (std::size_t i = 0; i < len; ++i) {
-        out << std::setw(2) << static_cast<int>(data[i]);
+struct AwsSdkLifecycle {
+    AwsSdkLifecycle() {
+        Aws::InitAPI(options);
     }
-    return out.str();
-}
 
-// Hashes a string with SHA-256 and returns lowercase hex.
-std::string sha256_hex(const std::string& value) {
-    unsigned char hash[SHA256_DIGEST_LENGTH];
-    SHA256(reinterpret_cast<const unsigned char*>(value.data()), value.size(), hash);
-    return hex_encode(hash, SHA256_DIGEST_LENGTH);
-}
-
-// Computes an HMAC-SHA256 signature for AWS signing.
-std::string hmac_sha256(const std::string& key, const std::string& value) {
-    unsigned int len = EVP_MAX_MD_SIZE;
-    unsigned char hash[EVP_MAX_MD_SIZE];
-    HMAC(EVP_sha256(),
-        key.data(),
-        static_cast<int>(key.size()),
-        reinterpret_cast<const unsigned char*>(value.data()),
-        value.size(),
-        hash,
-        &len);
-    return std::string(reinterpret_cast<char*>(hash), len);
-}
-
-// Percent-encodes a string using AWS SigV4 URI escaping rules.
-std::string aws_encode(const std::string& value, bool encode_slash) {
-    std::ostringstream out;
-    out << std::uppercase << std::hex << std::setfill('0');
-    for (unsigned char c : value) {
-        const bool unreserved =
-            std::isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~';
-        if (unreserved || (!encode_slash && c == '/')) {
-            out << c;
-        } else {
-            out << '%' << std::setw(2) << static_cast<int>(c);
-        }
+    ~AwsSdkLifecycle() {
+        Aws::ShutdownAPI(options);
     }
-    return out.str();
+
+    Aws::SDKOptions options;
+};
+
+void ensure_aws_sdk_initialized() {
+    static AwsSdkLifecycle lifecycle;
 }
 
-// Formats the current UTC time using the provided strftime pattern.
-std::string utc_timestamp(const char* format) {
-    const std::time_t now = std::time(nullptr);
-    std::tm tm{};
-    gmtime_r(&now, &tm);
-
-    char buffer[32];
-    std::strftime(buffer, sizeof(buffer), format, &tm);
-    return buffer;
-}
-
-// Creates an AWS S3 presigned URL without relying on the MinIO SDK path.
-storage_json create_aws_presigned_url(
+// Uses AWS SDK for C++ to create a real AWS S3 presigned object URL.
+storage_json create_aws_sdk_presigned_url(
     minio::http::Method method,
     const std::string& bucket,
     const std::string& object_key,
@@ -247,49 +209,30 @@ storage_json create_aws_presigned_url(
         return storage_error("missing S3 credentials");
     }
 
-    const std::string host = bucket + ".s3." + region + ".amazonaws.com";
-    const std::string amz_date = utc_timestamp("%Y%m%dT%H%M%SZ");
-    const std::string date = utc_timestamp("%Y%m%d");
-    const std::string credential_scope = date + "/" + region + "/s3/aws4_request";
-    const std::string signed_headers = "host";
+    ensure_aws_sdk_initialized();
 
-    const std::string canonical_uri = "/" + aws_encode(object_key, false);
-    const std::string canonical_query =
-        "X-Amz-Algorithm=AWS4-HMAC-SHA256"
-        "&X-Amz-Credential=" + aws_encode(access_key + "/" + credential_scope, true) +
-        "&X-Amz-Date=" + amz_date +
-        "&X-Amz-Expires=" + std::to_string(expires_seconds) +
-        "&X-Amz-SignedHeaders=" + signed_headers;
-    const std::string canonical_headers = "host:" + host + "\n";
-    const std::string canonical_request =
-        method_name(method) + "\n" +
-        canonical_uri + "\n" +
-        canonical_query + "\n" +
-        canonical_headers + "\n" +
-        signed_headers + "\n" +
-        "UNSIGNED-PAYLOAD";
+    Aws::Client::ClientConfiguration config;
+    config.region = aws_string(region);
 
-    const std::string string_to_sign =
-        "AWS4-HMAC-SHA256\n" +
-        amz_date + "\n" +
-        credential_scope + "\n" +
-        sha256_hex(canonical_request);
+    const Aws::Auth::AWSCredentials credentials(
+        aws_string(access_key),
+        aws_string(secret_key));
+    Aws::S3::S3Client client(
+        credentials,
+        config,
+        Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never,
+        true);
 
-    const std::string signing_key =
-        hmac_sha256(
-            hmac_sha256(
-                hmac_sha256(
-                    hmac_sha256("AWS4" + secret_key, date),
-                    region),
-                "s3"),
-            "aws4_request");
-    const std::string signature = hex_encode(
-        reinterpret_cast<const unsigned char*>(
-            hmac_sha256(signing_key, string_to_sign).data()),
-        SHA256_DIGEST_LENGTH);
+    const Aws::String url = client.GeneratePresignedUrl(
+        aws_string(bucket),
+        aws_string(object_key),
+        aws_http_method(method),
+        static_cast<long long>(expires_seconds));
+    if (url.empty()) {
+        return storage_error("failed to create AWS S3 presigned URL");
+    }
 
-    res["url"] = "https://" + host + canonical_uri + "?" +
-        canonical_query + "&X-Amz-Signature=" + signature;
+    res["url"] = std::string(url.c_str(), url.size());
     return res;
 }
 
@@ -310,7 +253,7 @@ storage_json create_presigned_url(
 
     storage_json res;
     if (endpoint.find("amazonaws.com") != std::string::npos) {
-        return create_aws_presigned_url(method, bucket, object_key, expires_seconds);
+        return create_aws_sdk_presigned_url(method, bucket, object_key, expires_seconds);
     }
 
     minio::s3::BaseUrl base_url = make_minio_base_url(endpoint);

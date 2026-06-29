@@ -45,7 +45,7 @@ RUN --mount=type=cache,target=/var/cache/vcpkg,sharing=locked \
       ${VCPKG_ROOT}/vcpkg install \
         --overlay-triplets=${VCPKG_OVERLAY_TRIPLETS} \
         --triplet=${VCPKG_TARGET_TRIPLET} \
-        minio-cpp jwt-cpp "hiredis[ssl]" && \
+        "aws-sdk-cpp[s3]" minio-cpp jwt-cpp "hiredis[ssl]" && \
     cp -a ${VCPKG_ROOT}/installed/${VCPKG_TARGET_TRIPLET} /opt/vcpkg-runtime
 
 WORKDIR /workspace
