@@ -13,6 +13,14 @@ build/
 .env.*
 !.env.example
 !.env.production.example
+!.env.vm.example
+
+# Terraform local state and provider cache
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
 
 # local production deployment files
 /deploy/aws/ecs-runtime-secrets-policy.json
