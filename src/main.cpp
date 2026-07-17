@@ -22,7 +22,7 @@
 
 
 #define DEFAULT_MAX_FD 4096  // default maximum #file descriptors/connections
-#define MAX_EVENT_NUMBER 10000  // maximum #events to be listned
+#define MAX_EVENT_NUMBER 4096  // maximum #events to be returned by the epoll_wait
 
 // Treats common truthy environment values as enabled flags.
 bool env_enabled(const char* name) {
@@ -35,7 +35,7 @@ void addsig(int sig, void(handler)(int)){
     struct sigaction sa;
     memset(&sa, '\0', sizeof(sa));
     sa.sa_handler = handler;
-    sigfillset(&sa.sa_mask);
+    sigfillset(&sa.sa_mask); // while this hanlder is running, other signals are blocked
     sigaction(sig, &sa, NULL);
 }
 
