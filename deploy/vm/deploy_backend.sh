@@ -23,9 +23,9 @@ compose() {
     "$@"
 }
 
-compose build web1 web2
+compose build web1
 compose up -d postgres redis minio
 compose run --rm minio-init
 compose run --rm migrations
-compose up -d --remove-orphans nginx web1 web2 postgres redis minio
+compose up -d --remove-orphans nginx web1 postgres redis minio
 compose ps
