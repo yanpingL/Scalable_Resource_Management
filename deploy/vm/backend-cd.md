@@ -8,7 +8,6 @@ Long-running containers:
 ```text
 nginx
 web1
-web2
 postgres
 redis
 minio

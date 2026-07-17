@@ -23,30 +23,6 @@ services:
       minio:
         condition: service_started
 
-  web2:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: webserver-backend-vm:latest
-    container_name: vm-web-2
-    restart: unless-stopped
-    env_file:
-      - ${VM_ENV_FILE:-.env.vm}
-    environment:
-      POSTGRES_HOST: postgres
-      POSTGRES_PORT: 5432
-      REDIS_ENABLED: true
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      S3_ENDPOINT: http://minio:9000
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_started
-      minio:
-        condition: service_started
-
   nginx:
     image: caddy:2-alpine
     container_name: vm-nginx
@@ -62,7 +38,6 @@ services:
       - caddy_config:/config
     depends_on:
       - web1
-      - web2
       - minio
 
   postgres:
