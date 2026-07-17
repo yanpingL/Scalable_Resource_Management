@@ -45,8 +45,10 @@ cp deploy/vm/.env.vm.example /opt/webserver/.env.vm
 Edit `/opt/webserver/.env.vm` with production values. Do not commit that
 file.
 
-Only expose nginx publicly. Keep Postgres, Redis, and MinIO private to the
-Docker network. The VM nginx config proxies `/api/*` to the C++ backend and
+Only expose the `nginx` Compose service publicly. The service name is retained
+for deployment compatibility, but it runs Caddy so the public endpoint gets an
+automatically managed HTTPS certificate. Keep Postgres, Redis, and MinIO
+private to the Docker network. Caddy proxies `/api/*` to the C++ backend and
 `/webserver-files/*` to MinIO so browser presigned uploads/downloads can work
 without exposing the MinIO port directly.
 
@@ -76,7 +78,7 @@ If omitted, the workflow uses `/opt/webserver`.
 
 ## Vercel
 
-Set the frontend `API_BASE_URL` to the VM nginx public URL, for example:
+Set the frontend `API_BASE_URL` to the VM public HTTPS URL, for example:
 
 ```text
 API_BASE_URL=https://api.example.com
