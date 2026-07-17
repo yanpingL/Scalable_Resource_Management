@@ -84,7 +84,6 @@ bool threadpool<T>::append(T *request){
             Logger::get_instance()->log(ERROR, "thread pool queue is full; request rejected");
             return false;
         }
-
         m_workqueue.push_back(request);
     }
 

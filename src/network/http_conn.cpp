@@ -203,6 +203,7 @@ bool http_conn::write(){
         bytes_to_send = m_iv[0].iov_len +(m_iv_count == 2 ? m_iv[1].iov_len : 0);
 
         if ( bytes_to_send <= 0 ) {
+            // Check if the connection keep-alive
             if(m_linger) {
                 init();
                 modfd( m_epollfd, m_sockfd, EPOLLIN );
@@ -329,6 +330,7 @@ http_conn::LINE_STATUS http_conn::parse_line(){
 
 
 // Parse HTTP reuqest line, get the method, target URL, HTTP version
+// eg: GET /api/resources HTTP/1.1
 http_conn::HTTP_CODE http_conn::parse_request_line(char * text){
     m_url = strpbrk(text, " \t");
     if (!m_url) {

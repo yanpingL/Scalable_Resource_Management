@@ -27,7 +27,7 @@ jobs:
           cache-to: type=gha,scope=backend-arm64-ci,mode=max
 
       - name: Run C++ unit tests
-        run: docker run --rm webserver-web-dev:latest ./build/bin/unit_tests
+        run: docker run --rm webserver-web-dev:latest ./build/bin/unit_tests 2>&1
 
       - name: Clean up Docker environment
         if: always()
