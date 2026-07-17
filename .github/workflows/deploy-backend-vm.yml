@@ -1,0 +1,103 @@
+name: Deploy Backend to VM
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "src/**"
+      - "db/**"
+      - "scripts/**"
+      - "tests/**"
+      - "vcpkg-triplets/**"
+      - "deploy/vm/**"
+      - "CMakeLists.txt"
+      - "Dockerfile"
+      - ".dockerignore"
+      - "docker-compose.vm.yml"
+      - "nginx.conf"
+      - ".github/workflows/deploy-backend-vm.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-backend-vm-production
+  cancel-in-progress: false
+
+env:
+  VM_DEPLOY_PATH: ${{ vars.VM_DEPLOY_PATH || '/opt/webserver' }}
+
+jobs:
+  deploy:
+    name: Deploy backend stack
+    runs-on: ubuntu-24.04-arm
+    environment: vm-production
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Configure SSH
+        env:
+          VM_SSH_PRIVATE_KEY: ${{ secrets.VM_SSH_PRIVATE_KEY }}
+          VM_SSH_HOST: ${{ secrets.VM_SSH_HOST }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "${VM_SSH_PRIVATE_KEY}" > ~/.ssh/vm_deploy_key
+          chmod 600 ~/.ssh/vm_deploy_key
+          ssh-keyscan -H "${VM_SSH_HOST}" >> ~/.ssh/known_hosts
+
+      - name: Package backend deployment
+        run: |
+          tar \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='.env' \
+            --exclude='.env.vm' \
+            --exclude='build' \
+            --exclude='frontend' \
+            --exclude='workspace' \
+            -czf /tmp/webserver-vm-${{ github.sha }}.tar.gz .
+
+      - name: Upload release archive
+        env:
+          VM_SSH_HOST: ${{ secrets.VM_SSH_HOST }}
+          VM_SSH_USER: ${{ secrets.VM_SSH_USER }}
+        run: |
+          scp \
+            -i ~/.ssh/vm_deploy_key \
+            /tmp/webserver-vm-${{ github.sha }}.tar.gz \
+            "${VM_SSH_USER}@${VM_SSH_HOST}:/tmp/webserver-vm-${{ github.sha }}.tar.gz"
+
+      - name: Deploy on VM
+        env:
+          VM_SSH_HOST: ${{ secrets.VM_SSH_HOST }}
+          VM_SSH_USER: ${{ secrets.VM_SSH_USER }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: |
+          ssh -i ~/.ssh/vm_deploy_key "${VM_SSH_USER}@${VM_SSH_HOST}" \
+            "VM_DEPLOY_PATH='${VM_DEPLOY_PATH}' RELEASE_SHA='${RELEASE_SHA}' bash -s" <<'REMOTE'
+          set -euo pipefail
+
+          release_dir="${VM_DEPLOY_PATH}/releases/${RELEASE_SHA}"
+          shared_env="${VM_DEPLOY_PATH}/.env.vm"
+          archive="/tmp/webserver-vm-${RELEASE_SHA}.tar.gz"
+
+          if [[ ! -f "${shared_env}" ]]; then
+            echo "Missing ${shared_env}. Create it from deploy/vm/.env.vm.example before deploying." >&2
+            exit 1
+          fi
+
+          mkdir -p "${release_dir}"
+          tar -xzf "${archive}" -C "${release_dir}"
+          ln -sfn "${shared_env}" "${release_dir}/.env.vm"
+
+          cd "${release_dir}"
+          chmod +x deploy/vm/deploy_backend.sh
+          ./deploy/vm/deploy_backend.sh
+
+          ln -sfn "${release_dir}" "${VM_DEPLOY_PATH}/current"
+          rm -f "${archive}"
+          REMOTE

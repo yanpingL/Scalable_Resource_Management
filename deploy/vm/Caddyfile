@@ -1,0 +1,6 @@
+{$S3_PUBLIC_ENDPOINT} {
+    @backend path /api/* /health
+    reverse_proxy @backend web1:8080 web2:8080
+
+    reverse_proxy /webserver-files/* minio:9000
+}

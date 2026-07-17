@@ -1,0 +1,14 @@
+subscription_id = "a16347c2-f8f5-4002-88e7-065f14bdd973"
+
+project_name        = "webserver"
+resource_group_name = "rg-webserver"
+location            = "australiaeast"
+vm_size             = "Standard_B2pts_v2"
+admin_username      = "azureuser"
+ssh_public_key_path = "~/.ssh/webserver_azure.pub"
+
+# Better: replace * with your public IP CIDR, for example "203.0.113.10/32".
+ssh_source_address_prefix = "*"
+
+os_disk_size_gb = 64
+deploy_path     = "/opt/webserver"
