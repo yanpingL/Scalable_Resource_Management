@@ -2,20 +2,6 @@ name: Deploy Backend
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - "src/**"
-      - "db/**"
-      - "scripts/**"
-      - "tests/**"
-      - "vcpkg-triplets/**"
-      - "CMakeLists.txt"
-      - "Dockerfile"
-      - ".dockerignore"
-      - "ecs-task-definition.json"
-      - ".github/workflows/deploy-backend.yml"
 
 permissions:
   contents: read
